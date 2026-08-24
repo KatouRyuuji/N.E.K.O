@@ -3,66 +3,302 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Companion Generator</title>
-  <link rel="stylesheet" href="/static/css/base.css" />
+  <title>N.E.K.O. 伴侣生成向导</title>
   <style>
-    .wizard { max-width: 640px; margin: 2rem auto; padding: 1.5rem; }
-    .wizard h1 { margin-bottom: 1rem; }
-    .field { margin-bottom: 1rem; }
-    .field label { display: block; margin-bottom: 0.25rem; }
-    .field input, .field textarea { width: 100%; }
-    #status { margin-top: 1rem; white-space: pre-wrap; font-family: monospace; }
+    :root {
+      --bg: #0f1220;
+      --bg-soft: #161a2e;
+      --card: rgba(255, 255, 255, 0.05);
+      --card-border: rgba(255, 255, 255, 0.09);
+      --text: #e8eaf6;
+      --text-dim: #9aa0c3;
+      --accent: #7c6cff;
+      --accent-soft: rgba(124, 108, 255, 0.18);
+      --green: #4ade80;
+      --amber: #fbbf24;
+      --red: #f87171;
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      background:
+        radial-gradient(1200px 600px at 80% -10%, rgba(124, 108, 255, 0.25), transparent 60%),
+        radial-gradient(900px 500px at -10% 110%, rgba(74, 222, 128, 0.12), transparent 60%),
+        var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      padding: 24px;
+    }
+    header {
+      max-width: 1080px;
+      margin: 0 auto 20px;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    header h1 { font-size: 1.45rem; font-weight: 700; letter-spacing: 0.02em; }
+    header h1 span { color: var(--accent); }
+    header p { color: var(--text-dim); font-size: 0.85rem; }
+    .grid {
+      max-width: 1080px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 18px;
+      align-items: start;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 20px;
+      backdrop-filter: blur(12px);
+    }
+    .card h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card h2 .badge {
+      font-size: 0.7rem;
+      font-weight: 500;
+      color: var(--text-dim);
+      background: var(--accent-soft);
+      border-radius: 999px;
+      padding: 2px 10px;
+    }
+    .field { margin-bottom: 14px; }
+    .field label {
+      display: block;
+      font-size: 0.82rem;
+      color: var(--text-dim);
+      margin-bottom: 6px;
+    }
+    .field input[type="text"],
+    .field select,
+    .field textarea {
+      width: 100%;
+      font: inherit;
+      color: var(--text);
+      background: var(--bg-soft);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 9px 12px;
+      outline: none;
+      resize: vertical;
+    }
+    .field input:focus, .field select:focus, .field textarea:focus {
+      border-color: var(--accent);
+    }
+    .field .hint { font-size: 0.72rem; color: var(--text-dim); margin-top: 4px; }
+    /* file pickers */
+    .file-field input[type="file"] { display: none; }
+    .file-trigger {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      background: var(--bg-soft);
+      border: 1px dashed var(--card-border);
+      border-radius: 10px;
+      padding: 9px 12px;
+      cursor: pointer;
+      transition: border-color 0.15s ease;
+    }
+    .file-trigger:hover { border-color: var(--accent); }
+    .file-trigger .placeholder { color: var(--text-dim); font-size: 0.85rem; }
+    .file-trigger .count {
+      font-size: 0.72rem;
+      color: var(--accent);
+      background: var(--accent-soft);
+      border-radius: 999px;
+      padding: 2px 10px;
+      white-space: nowrap;
+    }
+    button {
+      font: inherit;
+      color: var(--text);
+      background: var(--accent-soft);
+      border: 1px solid rgba(124, 108, 255, 0.35);
+      border-radius: 10px;
+      padding: 8px 16px;
+      cursor: pointer;
+      transition: background 0.15s ease, transform 0.1s ease;
+    }
+    button:hover { background: rgba(124, 108, 255, 0.32); }
+    button:active { transform: scale(0.97); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.primary {
+      width: 100%;
+      padding: 12px;
+      font-weight: 600;
+      background: linear-gradient(135deg, rgba(124, 108, 255, 0.85), rgba(124, 108, 255, 0.55));
+      border: none;
+    }
+    button.ghost { background: transparent; border-color: var(--card-border); color: var(--text-dim); }
+    button.ghost:hover { color: var(--text); }
+    .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+    /* pipeline progress */
+    .stages { list-style: none; }
+    .stage {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 10px;
+      border-radius: 10px;
+      font-size: 0.88rem;
+      color: var(--text-dim);
+    }
+    .stage .dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--card-border);
+      flex: none;
+    }
+    .stage.done { color: var(--text); }
+    .stage.done .dot { background: var(--green); }
+    .stage.running { color: var(--accent); }
+    .stage.running .dot { background: var(--accent); animation: pulse 1s ease infinite alternate; }
+    .stage.failed { color: var(--red); }
+    .stage.failed .dot { background: var(--red); }
+    @keyframes pulse { from { opacity: 0.4; } to { opacity: 1; } }
+    .pill { display: inline-block; border-radius: 999px; padding: 1px 10px; font-size: 0.75rem; }
+    .pill.ok { background: rgba(74, 222, 128, 0.15); color: var(--green); }
+    .pill.err { background: rgba(248, 113, 113, 0.15); color: var(--red); }
+    .pill.busy { background: rgba(251, 191, 36, 0.15); color: var(--amber); }
+    /* result */
+    #result { margin-top: 14px; display: none; }
+    #result.show { display: block; }
+    .kv { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; font-size: 0.85rem; }
+    .kv .k { color: var(--text-dim); flex: none; }
+    .kv .v { text-align: right; word-break: break-all; }
+    #import-result { margin-top: 10px; font-size: 0.85rem; }
+    #import-result.ok { color: var(--green); }
+    #import-result.err { color: var(--red); }
+    #manifest-view {
+      display: none;
+      margin-top: 12px;
+      max-height: 320px;
+      overflow: auto;
+      background: var(--bg-soft);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 12px;
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 0.75rem;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    #manifest-view.show { display: block; }
+    .empty { color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 14px 0; }
   </style>
 </head>
 <body>
-  <div class="wizard">
-    <h1>专属虚拟伴侣生成向导</h1>
-    <p>输入语料与配置，程序化分析并生成可导入的伴侣包。</p>
-    <form id="gen-form">
-      <div class="field">
-        <label for="name">伴侣名称</label>
-        <input id="name" name="companion_name" required />
+  <header>
+    <h1><span>N.E.K.O.</span> 伴侣生成向导</h1>
+    <p>上传语料与多模态参考素材，一键生成并导入专属虚拟伴侣</p>
+  </header>
+
+  <main class="grid">
+    <section class="card">
+      <h2>基本信息 <span class="badge">必填</span></h2>
+      <form id="gen-form">
+        <div class="field">
+          <label for="name">伴侣名称</label>
+          <input type="text" id="name" name="companion_name" maxlength="200" required placeholder="例如：小柚" />
+        </div>
+        <div class="field">
+          <label for="locale">语言</label>
+          <select id="locale" name="locale">
+            <option value="zh-CN" selected>中文（简体）</option>
+            <option value="en-US">English</option>
+            <option value="ja-JP">日本語</option>
+            <option value="ko-KR">한국어</option>
+            <option value="ru-RU">Русский</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="prompt">系统提示词（可选）</label>
+          <textarea id="prompt" name="system_prompt" rows="3" placeholder="人设卡、行为约束…留空则由语料自动提取"></textarea>
+        </div>
+        <div class="field">
+          <label for="corpus">语料文本</label>
+          <textarea id="corpus" name="corpus_text" rows="5" placeholder="聊天记录、设定片段、小说选段…"></textarea>
+        </div>
+        <div class="field file-field">
+          <label>语料文件（.txt / .md / .json / .csv …）</label>
+          <div class="file-trigger" data-for="file-corpus">
+            <span class="placeholder">选择语料文件</span>
+            <span class="count">未选择</span>
+          </div>
+          <input type="file" id="file-corpus" multiple
+                 accept=".txt,.md,.markdown,.json,.jsonl,.csv,.tsv,.log,.yaml,.yml" />
+        </div>
+        <button type="submit" class="primary" id="submit-btn">开始生成</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>多模态参考 <span class="badge">可选</span></h2>
+      <div class="field file-field">
+        <label>参考图（人设 / 外观）</label>
+        <div class="file-trigger" data-for="file-images">
+          <span class="placeholder">选择图片</span>
+          <span class="count">未选择</span>
+        </div>
+        <input type="file" id="file-images" multiple accept="image/*" />
+      </div>
+      <div class="field file-field">
+        <label>参考音频（声线克隆）</label>
+        <div class="file-trigger" data-for="file-audio">
+          <span class="placeholder">选择音频</span>
+          <span class="count">未选择</span>
+        </div>
+        <input type="file" id="file-audio" multiple accept="audio/*" />
+      </div>
+      <div class="field file-field">
+        <label>参考视频（动作 / 表情）</label>
+        <div class="file-trigger" data-for="file-video">
+          <span class="placeholder">选择视频</span>
+          <span class="count">未选择</span>
+        </div>
+        <input type="file" id="file-video" multiple accept="video/*" />
       </div>
       <div class="field">
-        <label for="corpus">语料文本</label>
-        <textarea id="corpus" name="corpus_text" rows="6" placeholder="聊天记录、设定片段…"></textarea>
+        <label for="live2d-id">Live2D 模型 ID（可选）</label>
+        <input type="text" id="live2d-id" placeholder="已注册的模型 ID" />
       </div>
       <div class="field">
-        <label for="prompt">系统提示词（可选）</label>
-        <textarea id="prompt" name="system_prompt" rows="3"></textarea>
+        <label for="live2d-path">Live2D 包路径（可选）</label>
+        <input type="text" id="live2d-path" placeholder="本机 .neko-companion 包 / 模型目录路径" />
+        <div class="hint">提供后模型会被打包进生成结果，可直接一键导入为角色</div>
       </div>
-      <div class="field">
-        <label for="live2d">Live2D 模型 ID（可选）</label>
-        <input id="live2d" name="live2d_model_id" />
+    </section>
+
+    <section class="card">
+      <h2>生成进度 <span class="pill" id="task-state" hidden></span></h2>
+      <ul class="stages" id="stage-list"></ul>
+      <div class="empty" id="progress-empty">填写左侧表单并点击「开始生成」</div>
+      <div id="result">
+        <div class="kv"><span class="k">任务 ID</span><span class="v" id="r-task"></span></div>
+        <div class="kv"><span class="k">生成包路径</span><span class="v" id="r-package"></span></div>
+        <div class="kv"><span class="k">LLM 路由</span><span class="v" id="r-llm"></span></div>
+        <div class="btn-row">
+          <button id="import-btn">导入为角色</button>
+          <button id="manifest-btn" class="ghost">查看 manifest</button>
+        </div>
+        <div id="import-result"></div>
+        <pre id="manifest-view"></pre>
       </div>
-      <button type="submit">开始生成</button>
-    </form>
-    <pre id="status"></pre>
-  </div>
-  <script>
-    const form = document.getElementById('gen-form');
-    const statusEl = document.getElementById('status');
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      statusEl.textContent = '提交中…';
-      const body = {
-        companion_name: form.companion_name.value.trim(),
-        corpus_text: form.corpus_text.value,
-        system_prompt: form.system_prompt.value || null,
-        live2d_model_id: form.live2d_model_id.value || null,
-      };
-      const res = await fetch('/api/companion/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const task = await res.json();
-      statusEl.textContent = JSON.stringify(task, null, 2);
-      if (task.id && task.status === 'completed') {
-        const m = await fetch(`/api/companion/generate/${task.id}/manifest`);
-        statusEl.textContent += '\n\n--- manifest ---\n' + JSON.stringify(await m.json(), null, 2);
-      }
-    });
-  </script>
+    </section>
+  </main>
+
+  <script src="/static/companion/wizard/wizard.js"></script>
 </body>
 </html>
