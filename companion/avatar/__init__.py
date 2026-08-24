@@ -13,8 +13,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Avatar registry, Live2D bridge, effects."""
+"""Avatar registry, package loader, Live2D bridge, effects."""
 
+from companion.avatar.loader import (
+  AvatarPackageError,
+  Live2DModelRef,
+  load_avatar_from_package,
+  resolve_live2d_model,
+  slugify_model_name,
+)
 from companion.avatar.registry import AvatarRegistry
 
-__all__ = ["AvatarRegistry"]
+__all__ = [
+  "AvatarRegistry",
+  "AvatarPackageError",
+  "Live2DModelRef",
+  "load_avatar_from_package",
+  "resolve_live2d_model",
+  "slugify_model_name",
+]
