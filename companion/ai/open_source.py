@@ -13,7 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Open-source AI provider detection and routing (Ollama first)."""
+"""Open-source AI provider detection and routing (Ollama first).
+
+Lightweight, env-driven counterpart of ``companion/generator/open_source.py``
+(no ``config``/logger imports so it stays import-cheap for the API layer).
+Backs ``GET /api/companion/ai/open-source``; the generator pipeline uses the
+richer generator-side module instead.
+"""
 
 from __future__ import annotations
 
@@ -50,7 +56,14 @@ def ollama_openai_base_url() -> str:
 
 
 def probe_ollama(timeout: float = 2.0) -> OpenSourceProvider:
-  """Check whether a local Ollama server is reachable."""
+  """Probe the local Ollama daemon via ``GET {OLLAMA_HOST}/api/tags``.
+
+  Blocking (sync httpx) — callers on the event loop must offload, e.g. with
+  ``asyncio.to_thread``. The preferred model comes from
+  ``COMPANION_OLLAMA_MODEL`` (default ``llama3``); if it is not among the
+  installed models, the first listed model is used instead. Any HTTP/parse
+  error yields an ``available=False`` provider rather than raising.
+  """
   base = ollama_base_url()
   model = os.environ.get("COMPANION_OLLAMA_MODEL", "llama3")
   provider = OpenSourceProvider(

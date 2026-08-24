@@ -79,11 +79,21 @@ def _avatar_public_dict(profile: AvatarProfile) -> dict:
 
 @router.get("/ai/open-source")
 async def companion_open_source_status():
+  """Report local open-source AI (Ollama) availability and routing config.
+
+  The probe is sync httpx with a short timeout, so it runs in a worker
+  thread to keep the event loop free. When no provider is reachable the raw
+  probe result (an ``OpenSourceProvider`` dataclass, serialized with
+  ``dataclasses.asdict``) is returned under ``providers`` for diagnostics.
+  """
+  from dataclasses import asdict
+
   from companion.ai.open_source import probe_ollama, resolve_open_source_provider
 
-  provider = resolve_open_source_provider()
+  provider = await asyncio.to_thread(resolve_open_source_provider)
   if provider is None:
-    return {"available": False, "providers": {"ollama": probe_ollama().model_dump()}}
+    probe = await asyncio.to_thread(probe_ollama)
+    return {"available": False, "providers": {"ollama": asdict(probe)}}
   return {
     "available": True,
     "active": provider.name,
