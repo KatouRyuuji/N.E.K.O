@@ -24,6 +24,7 @@ from companion.productivity.memo import MemoService
 from companion.productivity.pomodoro import PomodoroService
 from companion.productivity.storage import ProductivityStorage
 from companion.productivity.todo import TodoService
+from companion.productivity.widget_hook import pomodoro_widget_event
 
 
 class ProductivityService:
@@ -38,4 +39,6 @@ class ProductivityService:
     self.storage.close()
 
   def on_pomodoro_event(self, event: str) -> dict:
-    return {"event": event, "hook": "companion.persona.react"}
+    phase = self.pomodoro.snapshot().get("phase", "idle")
+    widget = pomodoro_widget_event(event, phase)
+    return {"event": event, "hook": "companion.persona.react", "widget": widget}

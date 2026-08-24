@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>Avatar Effects</title>
+  <link rel="stylesheet" href="/static/css/base.css" />
+  <style>
+    body { max-width: 480px; margin: 2rem auto; padding: 1rem; }
+    label { display: block; margin: 0.5rem 0; }
+  </style>
+</head>
+<body>
+  <h1>特效与装饰</h1>
+  <label><input type="checkbox" id="particles" /> 粒子特效</label>
+  <label>边框 <input id="border" placeholder="e.g. glow-blue" /></label>
+  <label>背景 <input id="background" placeholder="e.g. gradient-night" /></label>
+  <button id="apply">应用</button>
+  <pre id="out"></pre>
+  <script>
+    document.getElementById('apply').onclick = async () => {
+      const list = await fetch('/api/companion/avatar/list').then(r => r.json());
+      const id = list.active_id || (list.profiles[0] && list.profiles[0].id);
+      if (!id) { document.getElementById('out').textContent = '无可用形象'; return; }
+      const params = new URLSearchParams({
+        profile_id: id,
+        particles: document.getElementById('particles').checked,
+        border: document.getElementById('border').value,
+        background: document.getElementById('background').value,
+      });
+      const res = await fetch('/api/companion/avatar/effects?' + params, { method: 'POST' });
+      document.getElementById('out').textContent = JSON.stringify(await res.json(), null, 2);
+    };
+  </script>
+</body>
+</html>

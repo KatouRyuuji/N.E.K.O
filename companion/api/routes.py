@@ -511,3 +511,44 @@ async def get_avatar_resource(profile_id: str, resource_path: str):
   if not target.is_file():
     raise HTTPException(status_code=404, detail="resource not found")
   return FileResponse(target)
+
+
+@router.get("/avatar/effects/schema")
+async def avatar_effects_schema():
+  from companion.avatar.effects import EffectConfig
+
+  return EffectConfig().to_dict()
+
+
+@router.post("/avatar/effects")
+async def set_avatar_effects(
+  profile_id: str,
+  particles: bool = False,
+  border: str = "",
+  background: str = "",
+):
+  profile = next(
+    (p for p in _avatar_registry.list_profiles() if p.id == profile_id), None
+  )
+  if profile is None:
+    raise HTTPException(status_code=404, detail="avatar profile not found")
+  from companion.avatar.effects import EffectConfig
+
+  fx = EffectConfig(
+    particles=particles, border=border, background=background
+  )
+  profile.effects["decorations"] = fx.to_dict()
+  return {"profile_id": profile_id, "effects": fx.to_dict()}
+
+
+@router.post("/tts/preview")
+async def tts_preview(text: str = "你好，我是你的专属虚拟伴侣。"):
+  from companion.ai.tts_bridge import CompanionTTSBridge
+  from companion.models.profile import CompanionProfile
+
+  active = _avatar_registry.active()
+  name = active.display_name if active else "companion"
+  bridge = CompanionTTSBridge(
+    CompanionProfile(id="preview", name=name, display_name=name)
+  )
+  return bridge.preview_payload(text)

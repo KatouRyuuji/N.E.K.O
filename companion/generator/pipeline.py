@@ -362,9 +362,9 @@ def run_pipeline_sync(task: GenerationTask, output_root: Path | None = None) -> 
         avatar_id = gen_input.live2d_model_id or ""
 
       elif stage == GenerationStage.CONFIGURE_VOICE:
-        voice = VoiceConfig(
-          reference_audio_paths=list(gen_input.reference_audio),
-        )
+        from companion.generator.voice_mapping import map_reference_audio_to_voice
+
+        voice = map_reference_audio_to_voice(list(gen_input.reference_audio))
 
       elif stage == GenerationStage.INIT_MEMORY:
         if not memory_seeds:

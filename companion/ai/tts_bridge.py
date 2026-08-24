@@ -31,3 +31,14 @@ class CompanionTTSBridge:
       "voice_id": voice.voice_id,
       "reference_audio_paths": list(voice.reference_audio_paths),
     }
+
+  def preview_payload(self, text: str = "你好，我是你的专属虚拟伴侣。") -> dict:
+    """Return TTS preview request payload (execution deferred to runtime TTS worker)."""
+    cfg = self.voice_config()
+    return {
+      "text": text,
+      "provider": cfg["provider"] or "default",
+      "voice_id": cfg["voice_id"],
+      "reference_audio_paths": cfg["reference_audio_paths"],
+      "status": "ready" if cfg["reference_audio_paths"] or cfg["voice_id"] else "unconfigured",
+    }
