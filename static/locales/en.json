@@ -4983,7 +4983,8 @@
         "workshop": {
             "title": "Companion Workshop",
             "empty": "No published companions yet.",
-            "publish": "Publish to workshop"
+            "publish": "Publish to workshop",
+            "viewDetails": "Details"
         },
         "ollama": {
             "title": "Ollama Local Model Setup",

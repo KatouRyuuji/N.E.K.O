@@ -4983,7 +4983,8 @@
         "workshop": {
             "title": "コンパニオン工房",
             "empty": "公開されたコンパニオンはまだありません。",
-            "publish": "工房に公開"
+            "publish": "工房に公開",
+            "viewDetails": "詳細"
         },
         "ollama": {
             "title": "Ollama ローカルモデル設定",

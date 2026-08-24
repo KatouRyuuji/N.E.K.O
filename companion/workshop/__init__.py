@@ -18,11 +18,13 @@
 from companion.workshop.export import (
   build_workshop_listing,
   export_workshop_bundle,
+  find_workshop_entry,
   scan_workshop_catalog,
 )
 
 __all__ = [
   "build_workshop_listing",
   "export_workshop_bundle",
+  "find_workshop_entry",
   "scan_workshop_catalog",
 ]

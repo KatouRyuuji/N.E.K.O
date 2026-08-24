@@ -44,8 +44,8 @@
 
 - [x] **M1** Ollama 一键配置：`static/companion/ollama/`、`POST /ai/open-source/config`（[#9](https://github.com/KatouRyuuji/N.E.K.O/pull/9)）。
 - [x] **M2** Avatar Registry SQLite + `DELETE /avatar/{profile_id}`（[#8](https://github.com/KatouRyuuji/N.E.K.O/pull/8)）。
-- [ ] **M3** 指标：`GET /metrics`、阶段耗时（进行中，见 `cursor/companion-metrics-m3-3e93`）。
-- [ ] **M5** 工坊市场 UX（待 wave2 子代理或后续 PR）。
+- [x] **M3** 指标：`GET /metrics`、阶段耗时（[#10+ / main `5297af8f`]）。
+- [x] **M5** 工坊市场 UX：catalog 卡片元数据、封面资源、`GET /workshop/entry/{catalog_id}`（`cursor/companion-workshop-m5-3e93`）。
 
 ## M1 交接 — Ollama 一键配置向导（P0，已完成）
 

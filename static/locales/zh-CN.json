@@ -4983,7 +4983,8 @@
         "workshop": {
             "title": "伴侣创意工坊",
             "empty": "尚无已上架的伴侣包。",
-            "publish": "发布到工坊"
+            "publish": "发布到工坊",
+            "viewDetails": "详情"
         },
         "ollama": {
             "title": "Ollama 本地模型配置",

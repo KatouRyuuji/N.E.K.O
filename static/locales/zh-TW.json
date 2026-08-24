@@ -4983,7 +4983,8 @@
         "workshop": {
             "title": "伴侶創意工坊",
             "empty": "尚無已上架的伴侶包。",
-            "publish": "發布到工坊"
+            "publish": "發布到工坊",
+            "viewDetails": "詳情"
         },
         "ollama": {
             "title": "Ollama 本機模型設定",

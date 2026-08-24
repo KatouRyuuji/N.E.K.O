@@ -491,6 +491,29 @@ async def workshop_catalog():
   return {"entries": entries}
 
 
+@router.get("/workshop/entry/{catalog_id}")
+async def workshop_entry(catalog_id: str):
+  from companion.workshop.export import find_workshop_entry
+
+  entry = await asyncio.to_thread(find_workshop_entry, _workshop_export_root(), catalog_id)
+  if entry is None:
+    raise HTTPException(status_code=404, detail="workshop entry not found")
+  return entry
+
+
+@router.get("/workshop/asset/{catalog_id}/{resource_path:path}")
+async def workshop_asset(catalog_id: str, resource_path: str):
+  root = (_workshop_export_root() / catalog_id).resolve()
+  if not root.is_dir():
+    raise HTTPException(status_code=404, detail="workshop entry not found")
+  target = (root / resource_path).resolve()
+  if not target.is_relative_to(root):
+    raise HTTPException(status_code=403, detail="path escapes workshop directory")
+  if not target.is_file():
+    raise HTTPException(status_code=404, detail="asset not found")
+  return FileResponse(target)
+
+
 @router.post("/workshop/publish/{task_id}", status_code=201)
 async def publish_workshop_entry(task_id: str):
   from companion.workshop.export import export_workshop_bundle

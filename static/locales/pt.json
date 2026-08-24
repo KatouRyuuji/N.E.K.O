@@ -4983,7 +4983,8 @@
         "workshop": {
             "title": "Oficina de companheiros",
             "empty": "Ainda não há companheiros publicados.",
-            "publish": "Publicar na oficina"
+            "publish": "Publicar na oficina",
+            "viewDetails": "Detalhes"
         },
         "ollama": {
             "title": "Configuração do modelo local Ollama",

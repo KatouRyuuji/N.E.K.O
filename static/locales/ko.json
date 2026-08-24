@@ -4983,7 +4983,8 @@
         "workshop": {
             "title": "컴패니언 워크숍",
             "empty": "아직 게시된 컴패니언이 없습니다.",
-            "publish": "워크숍에 게시"
+            "publish": "워크숍에 게시",
+            "viewDetails": "상세"
         },
         "ollama": {
             "title": "Ollama 로컬 모델 설정",

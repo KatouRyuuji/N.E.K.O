@@ -30,10 +30,48 @@ def _utcnow() -> str:
   return datetime.now(timezone.utc).isoformat()
 
 
+def _cover_relative_path(package_dir: Path) -> str | None:
+  manifest_path = package_dir / "manifest.json"
+  if not manifest_path.is_file():
+    return None
+  try:
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+  except (OSError, json.JSONDecodeError):
+    return None
+  paths = data.get("resource_paths") or {}
+  images = str(paths.get("reference_images") or "").strip()
+  if not images:
+    return None
+  first = images.split(",")[0].strip()
+  if not first:
+    return None
+  candidate = Path(first)
+  if candidate.is_file():
+    try:
+      return str(candidate.relative_to(package_dir))
+    except ValueError:
+      return None
+  # Stored as path relative to package
+  rel = package_dir / first
+  if rel.is_file():
+    return first
+  return None
+
+
 def build_workshop_listing(task: GenerationTask) -> dict[str, Any]:
   if task.status != TaskStatus.COMPLETED or task.artifact is None:
     raise ValueError("task has no publishable artifact")
   profile = task.artifact.profile
+  package_dir = Path(task.artifact.package_path)
+  analysis = task.artifact.analysis_summary or {}
+  llm = analysis.get("llm") or {}
+  summary = ""
+  if isinstance(analysis, dict):
+    summary = str(analysis.get("summary") or "")[:280]
+  cover = _cover_relative_path(package_dir)
+  tags = ["companion", "generated"]
+  if llm.get("provider"):
+    tags.append(str(llm["provider"]))
   return {
     "task_id": task.id,
     "companion_id": profile.id,
@@ -42,8 +80,10 @@ def build_workshop_listing(task: GenerationTask) -> dict[str, Any]:
     "locale": profile.locale,
     "package_path": task.artifact.package_path,
     "published_at": _utcnow(),
-    "tags": ["companion", "generated"],
-    "generator": task.artifact.analysis_summary.get("llm", {}),
+    "tags": tags,
+    "summary": summary,
+    "cover_relative": cover,
+    "generator": llm,
   }
 
 
@@ -77,8 +117,22 @@ def scan_workshop_catalog(root: Path) -> list[dict[str, Any]]:
     if not meta_path.is_file():
       continue
     try:
-      entries.append(json.loads(meta_path.read_text(encoding="utf-8")))
+      meta = json.loads(meta_path.read_text(encoding="utf-8"))
+      meta = dict(meta)
+      meta["catalog_id"] = child.name
+      meta["export_path"] = str(child)
+      rel = meta.get("cover_relative")
+      if rel and (child / rel).is_file():
+        meta["cover_url"] = f"/api/companion/workshop/asset/{child.name}/{rel}"
+      entries.append(meta)
     except (OSError, json.JSONDecodeError):
       continue
   entries.sort(key=lambda e: e.get("published_at", ""), reverse=True)
   return entries
+
+
+def find_workshop_entry(root: Path, catalog_id: str) -> dict[str, Any] | None:
+  for entry in scan_workshop_catalog(root):
+    if entry.get("catalog_id") == catalog_id:
+      return entry
+  return None
