@@ -24,7 +24,9 @@ Route groups, all mounted through ``main_routers/companion_router``:
   text + realtime-voice facade metadata (Phase 4);
 - package import: ``/import`` — character card + memory seeds + avatar;
 - workshop: ``/workshop/catalog`` and ``/workshop/publish/{task_id}``;
-- avatar hot swap and effects: ``/avatar/*``;
+- avatar hot swap and effects: ``/avatar/*`` — SQLite-persisted registry
+  restored on first access, ``DELETE /avatar/{profile_id}`` with safe
+  package-path deletion (Phase 5 M2);
 - productivity: ``/productivity/*`` (pomodoro / todos / memos / media);
 - open-source probe: ``/ai/open-source``; TTS preview: ``/tts/preview``.
 """
@@ -56,7 +58,26 @@ from companion.avatar.registry import AvatarRegistry
 
 router = APIRouter(prefix="/api/companion", tags=["companion"])
 _productivity: ProductivityService | None = None
-_avatar_registry = AvatarRegistry()
+# Test override hook: when set (monkeypatch) it wins over the persisted
+# singleton — see _get_avatar_registry().
+_avatar_registry: AvatarRegistry | None = None
+
+
+def _get_avatar_registry() -> AvatarRegistry:
+  """Lazily resolve the avatar registry backing the ``/avatar/*`` routes.
+
+  Production path: the SQLite-persisted singleton from
+  :mod:`companion.avatar.store`, so avatars imported before a restart are
+  restored on first API access (registry, active selection, effects).
+  Deferred import keeps this module importable without touching the user
+  data directory; tests may monkeypatch ``_avatar_registry`` with a plain
+  in-memory :class:`AvatarRegistry` instead.
+  """
+  if _avatar_registry is not None:
+    return _avatar_registry
+  from companion.avatar.store import get_avatar_registry
+
+  return get_avatar_registry()
 
 
 def _avatar_public_dict(profile: AvatarProfile) -> dict:
@@ -74,6 +95,7 @@ def _avatar_public_dict(profile: AvatarProfile) -> dict:
     "display_name": profile.display_name,
     "slug": live2d.get("slug") or profile.resource_id,
     "entry_url": entry_url,
+    "decorations": profile.effects.get("decorations"),
   }
 
 
@@ -485,7 +507,7 @@ async def import_companion_package(body: ImportPackageRequest):
       avatar = await asyncio.to_thread(
         load_avatar_from_package,
         body.package_path,
-        _avatar_registry,
+        _get_avatar_registry(),
         body.activate_avatar,
       )
       result["avatar"] = _avatar_public_dict(avatar)
@@ -622,8 +644,9 @@ async def delete_memo(memo_id: str):
 
 @router.get("/avatar/list")
 async def list_avatars():
-  profiles = _avatar_registry.list_profiles()
-  active = _avatar_registry.active()
+  registry = _get_avatar_registry()
+  profiles = registry.list_profiles()
+  active = registry.active()
   return {
     "active_id": active.id if active else None,
     "profiles": [_avatar_public_dict(p) for p in profiles],
@@ -632,7 +655,7 @@ async def list_avatars():
 
 @router.get("/avatar/active")
 async def get_active_avatar():
-  active = _avatar_registry.active()
+  active = _get_avatar_registry().active()
   if active is None:
     return {"active": None}
   return {"active": _avatar_public_dict(active)}
@@ -640,7 +663,7 @@ async def get_active_avatar():
 
 @router.post("/avatar/active")
 async def set_active_avatar(profile_id: str):
-  profile = _avatar_registry.set_active(profile_id)
+  profile = _get_avatar_registry().set_active(profile_id)
   if profile is None:
     raise HTTPException(status_code=404, detail="avatar profile not found")
   return _avatar_public_dict(profile)
@@ -656,11 +679,48 @@ async def load_avatar_package(body: LoadPackageRequest):
   """Load a `.neko-companion` package directory and register its Live2D avatar."""
   try:
     profile = load_avatar_from_package(
-      body.package_path, _avatar_registry, activate=body.activate
+      body.package_path, _get_avatar_registry(), activate=body.activate
     )
   except AvatarPackageError as exc:
     raise HTTPException(status_code=422, detail=str(exc))
   return JSONResponse(status_code=201, content=_avatar_public_dict(profile))
+
+
+@router.delete("/avatar/{profile_id}")
+async def delete_avatar_profile(profile_id: str, delete_package: bool = False):
+  """Remove an avatar from the (persisted) registry, optionally with its package.
+
+  ``?delete_package=true`` also removes the package directory from disk,
+  guarded by the safe-path rules of
+  :func:`companion.avatar.store.remove_package_dir` — only directories
+  inside the managed companions data root that contain a ``manifest.json``
+  qualify. A violation returns ``409`` and leaves the registry unchanged.
+  """
+  from companion.avatar.store import PackagePathError, remove_package_dir
+
+  registry = _get_avatar_registry()
+  profile = registry.get(profile_id)
+  if profile is None:
+    raise HTTPException(status_code=404, detail="avatar profile not found")
+
+  removed_path: str | None = None
+  if delete_package:
+    live2d = profile.effects.get("live2d") or {}
+    package_dir = live2d.get("package_dir")
+    if package_dir:
+      try:
+        # rmtree is disk IO: keep it off the shared event loop.
+        removed_path = await asyncio.to_thread(remove_package_dir, package_dir)
+      except PackagePathError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+  registry.unregister(profile_id)
+  active = registry.active()
+  return {
+    "deleted": profile_id,
+    "active_id": active.id if active else None,
+    "package_removed": removed_path,
+  }
 
 
 @router.get("/avatar/{profile_id}/resource/{resource_path:path}")
@@ -670,9 +730,7 @@ async def get_avatar_resource(profile_id: str, resource_path: str):
   pixi-live2d-display resolves textures relative to the entry URL, so the
   whole package subtree must be reachable through this endpoint.
   """
-  profile = next(
-    (p for p in _avatar_registry.list_profiles() if p.id == profile_id), None
-  )
+  profile = _get_avatar_registry().get(profile_id)
   if profile is None:
     raise HTTPException(status_code=404, detail="avatar profile not found")
   live2d = profile.effects.get("live2d") or {}
@@ -702,9 +760,8 @@ async def set_avatar_effects(
   border: str = "",
   background: str = "",
 ):
-  profile = next(
-    (p for p in _avatar_registry.list_profiles() if p.id == profile_id), None
-  )
+  registry = _get_avatar_registry()
+  profile = registry.get(profile_id)
   if profile is None:
     raise HTTPException(status_code=404, detail="avatar profile not found")
   from companion.avatar.effects import EffectConfig
@@ -713,6 +770,8 @@ async def set_avatar_effects(
     particles=particles, border=border, background=background
   )
   profile.effects["decorations"] = fx.to_dict()
+  # Write-through: decorations survive restarts (Phase 5 M2).
+  registry.save_profile(profile)
   return {"profile_id": profile_id, "effects": fx.to_dict()}
 
 
@@ -721,7 +780,7 @@ async def tts_preview(text: str = "你好，我是你的专属虚拟伴侣。"):
   from companion.ai.tts_bridge import CompanionTTSBridge
   from companion.models.profile import CompanionProfile
 
-  active = _avatar_registry.active()
+  active = _get_avatar_registry().active()
   name = active.display_name if active else "companion"
   bridge = CompanionTTSBridge(
     CompanionProfile(id="preview", name=name, display_name=name)

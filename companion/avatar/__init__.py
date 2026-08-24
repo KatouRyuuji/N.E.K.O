@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Avatar registry, package loader, Live2D bridge, effects."""
+"""Avatar registry (SQLite-persisted), package loader, Live2D bridge, effects."""
 
 from companion.avatar.loader import (
   AvatarPackageError,
@@ -23,12 +23,26 @@ from companion.avatar.loader import (
   slugify_model_name,
 )
 from companion.avatar.registry import AvatarRegistry
+from companion.avatar.store import (
+  AvatarRegistryStore,
+  PackagePathError,
+  PersistentAvatarRegistry,
+  get_avatar_registry,
+  remove_package_dir,
+  reset_avatar_registry,
+)
 
 __all__ = [
   "AvatarRegistry",
+  "AvatarRegistryStore",
   "AvatarPackageError",
   "Live2DModelRef",
+  "PackagePathError",
+  "PersistentAvatarRegistry",
+  "get_avatar_registry",
   "load_avatar_from_package",
+  "remove_package_dir",
+  "reset_avatar_registry",
   "resolve_live2d_model",
   "slugify_model_name",
 ]

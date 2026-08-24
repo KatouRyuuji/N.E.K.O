@@ -12,7 +12,7 @@ companion/
 │   ├── realtime_voice.py  # 语音对话 facade（realtime tier + api_type）
 │   ├── runtime.py         # 两个对话 facade 共用的运行时/脱敏解析
 │   └── bootstrap.py       # 生成产物 → persona 记忆种子
-├── avatar/          # 形象注册、Live2D 桥接、特效
+├── avatar/          # 形象注册（SQLite 持久化，store.py）、Live2D 桥接、特效
 ├── productivity/    # 番茄钟/Todo/备忘/媒体监测（SQLite 持久化）
 ├── workshop/        # 创意工坊导出/目录扫描（export.py，Phase 4）
 └── api/             # FastAPI 路由聚合（/api/companion/*）
@@ -65,6 +65,23 @@ flowchart LR
 checkpoint；`POST /generate/{task_id}/retry` 从失败阶段恢复（已完成的 LLM
 阶段不重跑），全部生成端点支持 `?background=true` 异步模式。详见
 [COMPANION_GENERATOR.md](./COMPANION_GENERATOR.md)。
+
+## Avatar Registry 持久化（Phase 5 M2）
+
+avatar 注册表与生成任务 store 结构对偶：profile 以 JSON payload 行落
+SQLite（`avatar_profiles` + `avatar_registry_state` 两张表，路径经
+`NEKO_COMPANION_AVATAR_DB_PATH` 覆盖，默认在用户数据目录
+`companion/avatar_registry.db`）。`companion/api/routes.py` 首次访问
+avatar 路由时经 `companion.avatar.store.get_avatar_registry()` 惰性恢复：
+已导入的 profile、active 选择、以及 Phase 3 的 effects 装饰配置
+（`profile.effects["decorations"]`）都随 payload 一起还原，导入后重启
+`/avatar/list` 与资源端点仍然可用。
+
+`DELETE /api/companion/avatar/{profile_id}` 从注册表移除 profile（持久
+化，active 自动回退到剩余 profile）；`?delete_package=true` 连带删除包
+目录，但仅接受位于受管 companions 数据根（`<docs>/N.E.K.O/companions`，
+可经 `NEKO_COMPANION_PACKAGES_ROOT` 覆盖）内、且含 `manifest.json` 的
+目录 —— 路径逃逸或非包目录返回 409 且注册表不变。
 
 ## API 前缀
 
