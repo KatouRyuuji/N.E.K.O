@@ -1,7 +1,8 @@
 # Companion Platform Roadmap
 
-> 状态基准：Phase 4 集成已完成并合入 `main`（收尾清单与分支处置见
-> [PHASE5_STATUS.md](./PHASE5_STATUS.md)）。后续规划见 [PHASE5_PLAN.md](./PHASE5_PLAN.md)。
+> 状态基准：Phase 4 集成已完成；Phase 5 第二波（M1/M2/M3/M5）已合入 `main`。
+> 收尾与分支处置见 [PHASE5_STATUS.md](./PHASE5_STATUS.md)；进展见
+> [PHASE5_PROGRESS.md](./PHASE5_PROGRESS.md)。后续规划见 [PHASE5_PLAN.md](./PHASE5_PLAN.md)。
 
 ## Phase 1 — 基础骨架（已完成）
 
@@ -33,14 +34,18 @@
       （`GET /api/companion/session/{character_name}`、
       `POST /api/companion/dialogue/session`）
 - [x] Companion 向导/工坊 8 语言 i18n（`static/locales` + `companion/i18n.js`）
-- [ ] 移动端 Companion 同步协议 → **转入 Phase 5（P1）**
-- [ ] 开源 AI（Ollama）一键配置向导 → **转入 Phase 5（P0）**
-      （检测/路由已在 Phase 2 落地：`companion/generator/open_source.py`、
-      `companion/ai/open_source.py` + `GET /api/companion/ai/open-source`；
-      缺的是引导 UI）
+- [x] 开源 AI（Ollama）一键配置向导 → **Phase 5 M1 已完成**（`static/companion/ollama/`）
+- [ ] 移动端 Companion 同步协议 → **Phase 5 M6（P1，未开始）**
 
-## Phase 5+ — 深化与生态（规划中）
+## Phase 5 — 深化与生态（进行中）
 
-优先级、里程碑与验收标准见 [PHASE5_PLAN.md](./PHASE5_PLAN.md)。主题包括：
-Ollama 配置向导、监控与指标、记忆/人设深度集成、工坊市场体验、
-移动端同步、Electron Companion Shell。
+进度快照：[PHASE5_PROGRESS.md](./PHASE5_PROGRESS.md)。里程碑见 [PHASE5_PLAN.md](./PHASE5_PLAN.md)。
+
+- [x] **M1** Ollama 配置向导（PR #9）
+- [x] **M2** Avatar registry SQLite + 删除 API（PR #8）
+- [x] **M3** `GET /api/companion/metrics` + 阶段耗时（`5297af8f`）
+- [ ] **M4** 记忆 / 人设深度集成（P1）
+- [x] **M5** 工坊卡片 / entry / asset API（`b90efb72`）
+- [ ] **M6** 移动端同步协议（P1）
+- [ ] **M7** Electron Companion Shell（P2）
+- [ ] **M8** 声线克隆与 TTS 深化（P2）

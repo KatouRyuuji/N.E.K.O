@@ -192,3 +192,23 @@ flowchart LR
 ```
 
 M1 / M2 / M3 相互独立，可并行认领；M7 收口在 M2、M5 之后。
+
+---
+
+## Phase 5 第二波（已合入 `main`）
+
+> 执行快照见 [PHASE5_PROGRESS.md](./PHASE5_PROGRESS.md)。下列里程碑在第二波完成，
+> 第三波以 **M4 → M6** 为主（M7/M8 仍按上表 P2 排队）。
+
+| 里程碑 | 状态 | 备注 |
+|--------|------|------|
+| M1 Ollama 向导 | 已完成 | PR #9 |
+| M2 Avatar 持久化 | 已完成 | PR #8 |
+| M3 监控/指标 | 已完成 | `5297af8f` |
+| M5 工坊市场 UX | 已完成 | `b90efb72` |
+| M4 记忆/人设 | **待认领** | P1 |
+| M6 移动同步 | **待认领** | P1 |
+| M7 Electron | 未开始 | P2，依赖 M2+M5 |
+| M8 声线克隆 | 未开始 | P2 |
+
+**第三波验收习惯**：认领分支 → `uv run pytest tests/unit/test_companion_*.py` → PR → 合入 `main` 后更新 PHASE5_PROGRESS / STATUS。
