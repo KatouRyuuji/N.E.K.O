@@ -39,8 +39,12 @@ class CompanionAI:
     self.realtime = CompanionRealtimeVoiceBridge(profile)
     self.tts = CompanionTTSBridge(profile)
 
-  def bootstrap_from_generation(self, artifact: GenerationArtifact) -> dict:
-    return bootstrap_from_artifact(self.profile, artifact)
+  async def bootstrap_from_generation(
+    self, artifact: GenerationArtifact, persona_manager=None
+  ) -> dict:
+    return await bootstrap_from_artifact(
+      self.profile, artifact, persona_manager=persona_manager
+    )
 
   def open_source_config(self) -> dict | None:
     provider = resolve_open_source_provider()

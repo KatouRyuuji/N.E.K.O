@@ -181,6 +181,98 @@ async def download_manifest(task_id: str):
   return json.loads(manifest_path.read_text(encoding="utf-8"))
 
 
+class ImportPackageRequest(BaseModel):
+  package_path: str
+  register_character: bool = True
+  bootstrap_memory: bool = True
+  load_avatar: bool = True
+  activate_avatar: bool = True
+
+
+async def _notify_memory_server_reload_safe(*, reason: str) -> bool:
+  """Best-effort memory server ``/reload`` after registering a character.
+
+  Lazy import keeps companion importable without the main_routers package
+  booted (unit tests, standalone tools); any failure is non-fatal — the
+  memory server also discovers new characters on its next config load.
+  """
+  try:
+    from main_routers.characters_router.notify import notify_memory_server_reload
+  except Exception:
+    return False
+  try:
+    return await notify_memory_server_reload(reason=reason)
+  except Exception:
+    return False
+
+
+@router.post("/import", status_code=201)
+async def import_companion_package(body: ImportPackageRequest):
+  """Import a ``.neko-companion`` package end to end.
+
+  Steps (each individually toggleable):
+
+  1. register the manifest profile as a character card (characters.json),
+  2. bootstrap persona memory seeds into the memory service under the
+     **final** card key (conflict renames like ``name(1)`` must key the
+     memory files too, or the seeds would land under a ghost character),
+  3. register the bundled Live2D avatar for hot swap (best-effort — a
+     package without an avatar still imports persona + memory).
+  """
+  from companion.ai.bootstrap import seed_memory
+  from companion.ai.persona import CharacterCardError, register_character_card
+  from companion.avatar.loader import load_manifest
+
+  try:
+    manifest = await asyncio.to_thread(load_manifest, body.package_path)
+  except AvatarPackageError as exc:
+    raise HTTPException(status_code=422, detail=str(exc))
+  profile = manifest.profile
+
+  result: dict = {
+    "package_path": body.package_path,
+    "companion_id": profile.id,
+    "name": profile.name,
+    "character_name": None,
+    "memory": None,
+    "avatar": None,
+  }
+
+  character_name = None
+  if body.register_character:
+    try:
+      character_name = await register_character_card(profile)
+    except CharacterCardError as exc:
+      raise HTTPException(status_code=422, detail=str(exc))
+    result["character_name"] = character_name
+
+  if body.bootstrap_memory:
+    memory_name = character_name or profile.resolved_memory_name()
+    result["memory"] = await seed_memory(memory_name, manifest.memory_seeds)
+
+  if body.load_avatar:
+    try:
+      # Sync disk walk (rglob) inside — offload per the zero-blocking rule.
+      avatar = await asyncio.to_thread(
+        load_avatar_from_package,
+        body.package_path,
+        _avatar_registry,
+        body.activate_avatar,
+      )
+      result["avatar"] = _avatar_public_dict(avatar)
+    except AvatarPackageError as exc:
+      # Persona/memory already imported; report the avatar gap instead of
+      # failing the whole import.
+      result["avatar_error"] = str(exc)
+
+  if character_name is not None:
+    result["memory_server_reloaded"] = await _notify_memory_server_reload_safe(
+      reason=f"companion import: {character_name}"
+    )
+
+  return JSONResponse(status_code=201, content=result)
+
+
 @router.get("/productivity/status")
 async def productivity_status():
   prod = get_productivity()
