@@ -1,7 +1,7 @@
 # Companion Platform Roadmap
 
-> 状态基准：Phase 4 集成已完成（分支 `cursor/companion-phase4-integration-3e93`）。
-> 后续规划见 [PHASE5_PLAN.md](./PHASE5_PLAN.md)。
+> 状态基准：Phase 4 集成已完成并合入 `main`（收尾清单与分支处置见
+> [PHASE5_STATUS.md](./PHASE5_STATUS.md)）。后续规划见 [PHASE5_PLAN.md](./PHASE5_PLAN.md)。
 
 ## Phase 1 — 基础骨架（已完成）
 

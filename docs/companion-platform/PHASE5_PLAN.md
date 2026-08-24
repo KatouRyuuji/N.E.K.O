@@ -1,6 +1,7 @@
 # Phase 5+ 开发计划（进一步发展规划）
 
-> 前提：Phase 1–4 已交付（见 [ROADMAP.md](./ROADMAP.md)）。本计划按**优先级 +
+> 前提：Phase 1–4 已交付（见 [ROADMAP.md](./ROADMAP.md)）。执行状态与
+> M1 / M2 subagent 交接说明见 [PHASE5_STATUS.md](./PHASE5_STATUS.md)。本计划按**优先级 +
 > 里程碑**组织，不做日历排期；每个条目给出验收标准与主要触点，便于并行
 > agent 认领。横向约束沿用 `.agent/rules/neko-guide.md`：API 不带末尾斜杠、
 > UI 文案 8 locale 同步、辅助 LLM 调用走 tier + budget + timeout、async 路径
