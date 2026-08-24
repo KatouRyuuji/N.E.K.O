@@ -54,6 +54,32 @@ def _reset_shared_state():
 
 
 @pytest.fixture(autouse=True)
+def _isolate_companion_task_store(request, tmp_path, monkeypatch):
+    """Point the companion generation-task SQLite store at a per-test path.
+
+    Phase 4 made `companion.generator.tasks.get_task_store()` persistent
+    (SQLite on the user data root by default). Without this fixture, any
+    companion test touching the store would write into the developer's real
+    Documents tree and leak tasks across tests.
+    """
+    module_name = getattr(request.module, "__name__", "").split(".")[-1]
+    if not module_name.startswith("test_companion"):
+        yield
+        return
+
+    from companion.generator import tasks as tasks_mod
+
+    monkeypatch.setenv(
+        tasks_mod.ENV_TASKS_DB_PATH, str(tmp_path / "companion_generation_tasks.db")
+    )
+    tasks_mod.reset_task_store()
+    try:
+        yield
+    finally:
+        tasks_mod.reset_task_store()
+
+
+@pytest.fixture(autouse=True)
 def _reset_game_sessions(request):
     if not _needs_game_route_reset(request):
         yield

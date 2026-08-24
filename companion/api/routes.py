@@ -25,7 +25,11 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
-from companion.generator.pipeline import retry_generation, start_generation
+from companion.generator.pipeline import (
+  retry_generation,
+  start_generation,
+  start_generation_background,
+)
 from companion.generator.tasks import TaskStatus, get_task_store
 from companion.generator.uploads import UploadError, save_generation_uploads
 from companion.models.generation import GenerationInput
@@ -187,7 +191,18 @@ async def companion_session_metadata(character_name: str):
 
 
 @router.post("/generate")
-async def create_generation_task(body: GenerationInput):
+async def create_generation_task(body: GenerationInput, background: bool = False):
+  """Run a generation task.
+
+  Default (synchronous) mode blocks until the pipeline finishes and returns
+  ``201``. With ``?background=true`` the pipeline runs on a worker thread and
+  the response is an immediate ``202`` — poll ``GET /generate/{task_id}``
+  until ``status`` is ``completed``/``failed``.
+  """
+  if background:
+    # Fast (SQLite insert + thread spawn), but still off the event loop.
+    task = await asyncio.to_thread(start_generation_background, body)
+    return JSONResponse(status_code=202, content=task.to_public_dict())
   # LLM + disk IO inside the sync pipeline: offload so the shared event loop
   # (main/memory/agent subsystems) is never blocked by a generation task.
   task = await asyncio.to_thread(start_generation, body)
@@ -199,6 +214,7 @@ async def create_generation_task(body: GenerationInput):
 
 @router.post("/generate/upload")
 async def create_generation_task_multipart(
+  background: bool = False,
   companion_name: str = Form(min_length=1, max_length=200),
   locale: str = Form("zh-CN"),
   corpus_text: str = Form(""),
@@ -245,10 +261,13 @@ async def create_generation_task_multipart(
     reference_audio=saved.reference_audio,
     reference_video=saved.reference_video,
   )
-  task = await asyncio.to_thread(start_generation, gen_input)
+  if background:
+    task = await asyncio.to_thread(start_generation_background, gen_input)
+  else:
+    task = await asyncio.to_thread(start_generation, gen_input)
   payload = task.to_public_dict()
   payload["uploads"] = {"session_dir": saved.session_dir, **saved.counts()}
-  return JSONResponse(status_code=201, content=payload)
+  return JSONResponse(status_code=202 if background else 201, content=payload)
 
 
 @router.get("/generate")
@@ -271,13 +290,28 @@ async def get_generation_task(task_id: str):
 
 
 @router.post("/generate/{task_id}/retry")
-async def retry_generation_task(task_id: str):
-  try:
-    task = await asyncio.to_thread(retry_generation, task_id)
-  except KeyError:
+async def retry_generation_task(task_id: str, background: bool = False):
+  """Retry a failed generation task from its failing stage.
+
+  Stage checkpoints persisted by the previous attempt are reused, so
+  already-completed stages (including the LLM-backed ones) are not re-run.
+  Only ``failed`` tasks are retryable: ``404`` when unknown, ``409`` when
+  the task is pending/running/completed. With ``?background=true`` the
+  retry runs on a worker thread and the response is an immediate ``202``.
+  """
+  store = get_task_store()
+  task = store.get(task_id)
+  if task is None:
     raise HTTPException(status_code=404, detail="task not found")
-  except ValueError as exc:
-    raise HTTPException(status_code=409, detail=str(exc))
+  if task.status != TaskStatus.FAILED:
+    raise HTTPException(
+      status_code=409,
+      detail=f"only failed tasks can be retried (status={task.status.value})",
+    )
+  if background:
+    task = await asyncio.to_thread(retry_generation, task, background=True)
+    return JSONResponse(status_code=202, content=task.to_public_dict())
+  task = await asyncio.to_thread(retry_generation, task)
   return task.to_public_dict()
 
 

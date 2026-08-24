@@ -20,12 +20,20 @@ Phase 2: the analyze_corpus and extract_persona stages call a real LLM
 Ollama fallback (``companion/generator/open_source.py``) when the tier is not
 configured, and a deterministic heuristic fallback when no LLM is reachable
 at all — the pipeline never hard-fails because of a missing/unreachable LLM.
+
+Phase 4 (HA): every completed stage checkpoints its outputs into
+``task.stage_results`` (persisted by the SQLite task store), so
+``retry_generation`` resumes a failed task from the failing stage — already
+completed LLM stages are not re-run. ``start_generation_background`` runs
+the same pipeline on a daemon thread for long tasks; callers poll
+``GET /generate/{task_id}`` for status.
 """
 
 from __future__ import annotations
 
 import json
 import shutil
+import threading
 import uuid
 from pathlib import Path
 from typing import Any
@@ -296,8 +304,36 @@ def _bundle_live2d_package(source_path: str, package_dir: Path) -> str | None:
 # ── pipeline ───────────────────────────────────────────────────────────────
 
 
+def _restore_checkpoints(task: GenerationTask) -> dict[str, Any]:
+  """Rehydrate stage outputs persisted by a previous (failed) attempt."""
+  results = task.stage_results or {}
+  state: dict[str, Any] = {
+    "analysis": dict(results.get("analysis") or {}),
+    "system_prompt": str(results.get("system_prompt") or ""),
+    "memory_seeds": [
+      MemorySeed.model_validate(s) for s in results.get("memory_seeds") or []
+    ],
+    "avatar_kind": (
+      AvatarKind(results["avatar_kind"]) if results.get("avatar_kind")
+      else AvatarKind.LIVE2D
+    ),
+    "avatar_id": str(results.get("avatar_id") or ""),
+    "voice": (
+      VoiceConfig.model_validate(results["voice"]) if results.get("voice")
+      else VoiceConfig()
+    ),
+  }
+  if results.get("llm_meta"):
+    state["llm_meta"] = dict(results["llm_meta"])
+  return state
+
+
 def run_pipeline_sync(task: GenerationTask, output_root: Path | None = None) -> GenerationArtifact:
-  """Run all pipeline stages synchronously.
+  """Run all pipeline stages synchronously, resuming from checkpoints.
+
+  Stages already in ``task.stages_completed`` are skipped and their outputs
+  restored from ``task.stage_results`` — this is what makes a retry of a
+  failed task resume from the failing stage.
 
   Blocking by design (LLM + disk IO): async callers must offload with
   ``asyncio.to_thread`` (see ``companion/api/routes.py``).
@@ -306,29 +342,51 @@ def run_pipeline_sync(task: GenerationTask, output_root: Path | None = None) -> 
   gen_input = task.input
   out_root = output_root or _default_output_root()
 
-  analysis: dict[str, Any] = {}
-  system_prompt = ""
-  memory_seeds: list[MemorySeed] = []
-  llm_meta: dict[str, Any] = {"provider": "heuristic", "model": None}
+  completed = set(task.stages_completed)
+  state = _restore_checkpoints(task)
+  analysis: dict[str, Any] = state["analysis"]
+  system_prompt: str = state["system_prompt"]
+  memory_seeds: list[MemorySeed] = state["memory_seeds"]
+  avatar_kind: AvatarKind = state["avatar_kind"]
+  avatar_id: str = state["avatar_id"]
+  voice: VoiceConfig = state["voice"]
+  llm_meta: dict[str, Any] = state.get("llm_meta") or {
+    "provider": "heuristic", "model": None,
+  }
   llm: Any = None
 
-  api_config = _resolve_generator_api_config()
-  if api_config:
-    try:
-      llm = _create_generator_llm(api_config)
-      llm_meta = {
-        "provider": "ollama" if api_config.get("is_ollama") else "summary",
-        "model": api_config["model"],
-      }
-    except Exception:
-      logger.warning("Companion generator: LLM client construction failed", exc_info=True)
-      llm = None
+  # Only resolve an LLM route when an LLM stage still has to run — a resumed
+  # task whose analyze/persona stages already checkpointed must not probe
+  # the network (config tier / local Ollama) again.
+  needs_llm = (
+    GenerationStage.ANALYZE_CORPUS not in completed
+    or GenerationStage.EXTRACT_PERSONA not in completed
+  )
+  if needs_llm:
+    api_config = _resolve_generator_api_config()
+    if api_config:
+      try:
+        llm = _create_generator_llm(api_config)
+        llm_meta = {
+          "provider": "ollama" if api_config.get("is_ollama") else "summary",
+          "model": api_config["model"],
+        }
+      except Exception:
+        logger.warning("Companion generator: LLM client construction failed", exc_info=True)
+        llm = None
 
   task.status = TaskStatus.RUNNING
+  task.error = None
   store.update(task)
 
   try:
     for stage in _PIPELINE_STAGES:
+      if stage in completed:
+        logger.info(
+          "Companion generator resume: skipping stage=%s task=%s",
+          stage.value, task.id,
+        )
+        continue
       task.current_stage = stage
       store.update(task)
       logger.info("Companion generator stage=%s task=%s", stage.value, task.id)
@@ -347,6 +405,8 @@ def run_pipeline_sync(task: GenerationTask, output_root: Path | None = None) -> 
         else:
           analysis = result
           analysis["analysis_source"] = "llm"
+        task.stage_results["analysis"] = analysis
+        task.stage_results["llm_meta"] = llm_meta
 
       elif stage == GenerationStage.EXTRACT_PERSONA:
         persona = _extract_persona_llm(gen_input, analysis, llm) if llm else None
@@ -356,19 +416,30 @@ def run_pipeline_sync(task: GenerationTask, output_root: Path | None = None) -> 
           system_prompt, memory_seeds = _extract_persona_fallback(gen_input, analysis)
         else:
           system_prompt, memory_seeds = persona
+        task.stage_results["system_prompt"] = system_prompt
+        task.stage_results["memory_seeds"] = [
+          s.model_dump(mode="json") for s in memory_seeds
+        ]
+        task.stage_results["llm_meta"] = llm_meta
 
       elif stage == GenerationStage.CONFIGURE_AVATAR:
         avatar_kind = AvatarKind.LIVE2D
         avatar_id = gen_input.live2d_model_id or ""
+        task.stage_results["avatar_kind"] = avatar_kind.value
+        task.stage_results["avatar_id"] = avatar_id
 
       elif stage == GenerationStage.CONFIGURE_VOICE:
         from companion.generator.voice_mapping import map_reference_audio_to_voice
 
         voice = map_reference_audio_to_voice(list(gen_input.reference_audio))
+        task.stage_results["voice"] = voice.model_dump(mode="json")
 
       elif stage == GenerationStage.INIT_MEMORY:
         if not memory_seeds:
           memory_seeds = _default_memory_seeds(gen_input)
+          task.stage_results["memory_seeds"] = [
+            s.model_dump(mode="json") for s in memory_seeds
+          ]
 
       elif stage == GenerationStage.PACKAGE:
         profile_id = str(uuid.uuid4())
@@ -422,7 +493,10 @@ def run_pipeline_sync(task: GenerationTask, output_root: Path | None = None) -> 
         store.update(task)
         return artifact
 
+      # Persist the checkpoint the moment the stage completes: a later crash
+      # must find stages_completed/stage_results consistent for the retry.
       task.stages_completed.append(stage)
+      store.update(task)
 
     raise RuntimeError("pipeline ended without PACKAGE stage")
 
@@ -438,8 +512,6 @@ def run_pipeline_sync(task: GenerationTask, output_root: Path | None = None) -> 
 def start_generation(gen_input: GenerationInput) -> GenerationTask:
   store = get_task_store()
   task = store.create(gen_input)
-  task.attempt_count += 1
-  store.update(task)
   try:
     run_pipeline_sync(task)
   except Exception:
@@ -447,22 +519,62 @@ def start_generation(gen_input: GenerationInput) -> GenerationTask:
   return task
 
 
-def retry_generation(task_id: str) -> GenerationTask:
-  """Re-run a failed task when retries remain."""
-  store = get_task_store()
-  task = store.get(task_id)
-  if task is None:
-    raise KeyError(task_id)
-  if not task.can_retry():
-    raise ValueError("task is not eligible for retry")
-  task.retry_count += 1
-  task.attempt_count += 1
-  task.status = TaskStatus.PENDING
+# ── Phase 4: retry + background execution ──────────────────────────────────
+
+
+_background_lock = threading.Lock()
+_background_task_ids: set[str] = set()
+
+
+def is_generation_running(task_id: str) -> bool:
+  """True while a background thread is executing this task's pipeline."""
+  with _background_lock:
+    return task_id in _background_task_ids
+
+
+def _spawn_pipeline_thread(task: GenerationTask) -> threading.Thread:
+  def _run() -> None:
+    try:
+      run_pipeline_sync(task)
+    except Exception:
+      # run_pipeline_sync already persisted FAILED + error on the task.
+      pass
+    finally:
+      with _background_lock:
+        _background_task_ids.discard(task.id)
+
+  with _background_lock:
+    _background_task_ids.add(task.id)
+  thread = threading.Thread(
+    target=_run, name=f"companion-gen-{task.id[:8]}", daemon=True
+  )
+  thread.start()
+  return thread
+
+
+def start_generation_background(gen_input: GenerationInput) -> GenerationTask:
+  """Create a task and run the pipeline on a daemon thread.
+
+  Returns immediately with the task in ``pending``/``running`` state;
+  callers poll ``GET /generate/{task_id}`` until completed/failed.
+  """
+  task = get_task_store().create(gen_input)
+  _spawn_pipeline_thread(task)
+  return task
+
+
+def retry_generation(task: GenerationTask, *, background: bool = False) -> GenerationTask:
+  """Re-run a failed task, resuming from its persisted stage checkpoints.
+
+  The caller (API layer) is responsible for only passing FAILED tasks.
+  """
+  task.attempts += 1
   task.error = None
-  task.current_stage = None
-  task.stages_completed = []
-  task.artifact = None
-  store.update(task)
+  task.status = TaskStatus.PENDING
+  get_task_store().update(task)
+  if background:
+    _spawn_pipeline_thread(task)
+    return task
   try:
     run_pipeline_sync(task)
   except Exception:
