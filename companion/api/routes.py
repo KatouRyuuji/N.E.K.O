@@ -21,17 +21,38 @@ import json
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel
 
 from companion.generator.pipeline import start_generation
 from companion.generator.tasks import TaskStatus, get_task_store
 from companion.models.generation import GenerationInput
 from companion.productivity.service import ProductivityService
+from companion.avatar.loader import AvatarPackageError, load_avatar_from_package
+from companion.avatar.profile import AvatarProfile
 from companion.avatar.registry import AvatarRegistry
 
 router = APIRouter(prefix="/api/companion", tags=["companion"])
 _productivity = ProductivityService()
 _avatar_registry = AvatarRegistry()
+
+
+def _avatar_public_dict(profile: AvatarProfile) -> dict:
+  """Serialize an avatar profile for the swap panel / Live2D bridge."""
+  live2d = profile.effects.get("live2d") or {}
+  entry_url = None
+  if live2d.get("relative_entry"):
+    entry_url = (
+      f"/api/companion/avatar/{profile.id}/resource/{live2d['relative_entry']}"
+    )
+  return {
+    "id": profile.id,
+    "kind": profile.kind.value,
+    "resource_id": profile.resource_id,
+    "display_name": profile.display_name,
+    "slug": live2d.get("slug") or profile.resource_id,
+    "entry_url": entry_url,
+  }
 
 
 @router.get("/health")
@@ -153,16 +174,16 @@ async def list_avatars():
   active = _avatar_registry.active()
   return {
     "active_id": active.id if active else None,
-    "profiles": [
-      {
-        "id": p.id,
-        "kind": p.kind.value,
-        "resource_id": p.resource_id,
-        "display_name": p.display_name,
-      }
-      for p in profiles
-    ],
+    "profiles": [_avatar_public_dict(p) for p in profiles],
   }
+
+
+@router.get("/avatar/active")
+async def get_active_avatar():
+  active = _avatar_registry.active()
+  if active is None:
+    return {"active": None}
+  return {"active": _avatar_public_dict(active)}
 
 
 @router.post("/avatar/active")
@@ -170,8 +191,46 @@ async def set_active_avatar(profile_id: str):
   profile = _avatar_registry.set_active(profile_id)
   if profile is None:
     raise HTTPException(status_code=404, detail="avatar profile not found")
-  return {
-    "id": profile.id,
-    "kind": profile.kind.value,
-    "resource_id": profile.resource_id,
-  }
+  return _avatar_public_dict(profile)
+
+
+class LoadPackageRequest(BaseModel):
+  package_path: str
+  activate: bool = True
+
+
+@router.post("/avatar/load-package")
+async def load_avatar_package(body: LoadPackageRequest):
+  """Load a `.neko-companion` package directory and register its Live2D avatar."""
+  try:
+    profile = load_avatar_from_package(
+      body.package_path, _avatar_registry, activate=body.activate
+    )
+  except AvatarPackageError as exc:
+    raise HTTPException(status_code=422, detail=str(exc))
+  return JSONResponse(status_code=201, content=_avatar_public_dict(profile))
+
+
+@router.get("/avatar/{profile_id}/resource/{resource_path:path}")
+async def get_avatar_resource(profile_id: str, resource_path: str):
+  """Serve Live2D model files (entry JSON, textures, motions) from a package.
+
+  pixi-live2d-display resolves textures relative to the entry URL, so the
+  whole package subtree must be reachable through this endpoint.
+  """
+  profile = next(
+    (p for p in _avatar_registry.list_profiles() if p.id == profile_id), None
+  )
+  if profile is None:
+    raise HTTPException(status_code=404, detail="avatar profile not found")
+  live2d = profile.effects.get("live2d") or {}
+  package_dir = live2d.get("package_dir")
+  if not package_dir:
+    raise HTTPException(status_code=404, detail="avatar has no package resources")
+  root = Path(package_dir).resolve()
+  target = (root / resource_path).resolve()
+  if not target.is_relative_to(root):
+    raise HTTPException(status_code=403, detail="path escapes package directory")
+  if not target.is_file():
+    raise HTTPException(status_code=404, detail="resource not found")
+  return FileResponse(target)

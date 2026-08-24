@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Avatar 热替换</title>
+  <link rel="stylesheet" href="/static/css/base.css" />
+  <style>
+    .swap-panel { max-width: 640px; margin: 2rem auto; padding: 1.5rem; }
+    .swap-panel h1 { margin-bottom: 0.5rem; }
+    .swap-panel .hint { opacity: 0.75; margin-bottom: 1.25rem; }
+    .avatar-list { list-style: none; padding: 0; margin: 0 0 1.5rem; }
+    .avatar-item {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 0.75rem; padding: 0.6rem 0.75rem; margin-bottom: 0.5rem;
+      border: 1px solid rgba(128, 128, 128, 0.35); border-radius: 8px;
+    }
+    .avatar-item.active { border-color: #7c6cf0; box-shadow: 0 0 0 1px #7c6cf0; }
+    .avatar-meta { min-width: 0; }
+    .avatar-meta .name { font-weight: 600; }
+    .avatar-meta .slug { font-family: monospace; font-size: 0.85em; opacity: 0.7; }
+    .avatar-item button { flex-shrink: 0; }
+    .load-package { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+    .load-package input { flex: 1; }
+    #swap-status { margin-top: 1rem; white-space: pre-wrap; font-family: monospace; }
+    .empty { opacity: 0.7; font-style: italic; }
+  </style>
+</head>
+<body>
+  <div class="swap-panel">
+    <h1>Avatar 热替换</h1>
+    <p class="hint">从伴侣包加载 Live2D 模型，并在不重启的情况下切换当前 Avatar。</p>
+
+    <div class="load-package">
+      <input id="package-path" type="text"
+             placeholder=".neko-companion 包目录路径…" />
+      <button id="load-package-btn" type="button">加载包</button>
+    </div>
+
+    <ul id="avatar-list" class="avatar-list">
+      <li class="empty">加载中…</li>
+    </ul>
+
+    <button id="refresh-btn" type="button">刷新列表</button>
+    <pre id="swap-status"></pre>
+  </div>
+
+  <script src="/static/companion/avatar/live2d-bridge.js"></script>
+  <script src="/static/companion/avatar/swap-panel.js"></script>
+</body>
+</html>
