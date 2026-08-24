@@ -13,7 +13,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Companion Platform API routes."""
+"""Companion Platform API routes (``/api/companion``, no trailing slashes).
+
+Route groups, all mounted through ``main_routers/companion_router``:
+
+- generation: ``/generate`` (+ ``/upload``, ``/{task_id}``, ``/retry``,
+  ``/manifest``, ``/import``) — SQLite-persisted tasks, stage-checkpoint
+  retry, optional ``?background=true`` async mode (Phase 4 HA);
+- dialogue: ``/session/{character_name}`` and ``/dialogue/session`` —
+  text + realtime-voice facade metadata (Phase 4);
+- package import: ``/import`` — character card + memory seeds + avatar;
+- workshop: ``/workshop/catalog`` and ``/workshop/publish/{task_id}``;
+- avatar hot swap and effects: ``/avatar/*``;
+- productivity: ``/productivity/*`` (pomodoro / todos / memos / media);
+- open-source probe: ``/ai/open-source``; TTS preview: ``/tts/preview``.
+"""
 
 from __future__ import annotations
 
