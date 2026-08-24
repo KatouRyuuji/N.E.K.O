@@ -28,14 +28,15 @@
    manifest `resource_paths["live2d"]` 提示，使生成结果**自包含、可直接导入**
    （路径无效时降级为纯元数据包，不失败）
 
-## API（Phase 3）
+## API（Phase 3 / Phase 4）
 
 | 端点 | 说明 |
 |------|------|
-| `POST /api/companion/generate` | JSON 提交（`GenerationInput`），同步跑完 pipeline 后返回任务 |
-| `POST /api/companion/generate/upload` | **multipart/form-data** 多模态提交（见下） |
+| `POST /api/companion/generate` | JSON 提交（`GenerationInput`），同步跑完 pipeline 后返回任务；`?background=true` 时立即返回 **202**，后台执行 |
+| `POST /api/companion/generate/upload` | **multipart/form-data** 多模态提交（见下）；同样支持 `?background=true` |
 | `GET /api/companion/generate` | 任务列表 |
-| `GET /api/companion/generate/{task_id}` | 任务详情（完成后含 `artifact`） |
+| `GET /api/companion/generate/{task_id}` | 任务详情（完成后含 `artifact`）——background 模式下的**状态轮询**端点 |
+| `POST /api/companion/generate/{task_id}/retry` | **重试失败任务**（Phase 4，见下） |
 | `GET /api/companion/generate/{task_id}/manifest` | 下载生成的 manifest.json |
 | `POST /api/companion/generate/{task_id}/import` | **一键导入为角色**：把生成包注册进 avatar 热替换注册表 |
 
@@ -125,9 +126,48 @@ manifest 的 `generator_metadata` 记录本次生成的实际路由：
 
 ## 任务状态机
 
-`pending` → `running` → `completed` | `failed`
+`pending` → `running` → `completed` | `failed`（`failed` → 重试 → `pending` → …）
 
 每阶段可独立重试；任务 ID 全局唯一（UUID）。
+
+## 任务 HA（Phase 4）
+
+### 持久化任务 store（`companion/generator/tasks.py`）
+
+任务不再存内存 dict，而是 **SQLite** 持久化（`generation_tasks` 表：索引列
+`id/status/created_at/updated_at` + 任务全量 JSON `payload`），重启后任务、
+错误信息与阶段 checkpoint 全部可恢复。线程安全（单连接 + 锁，与
+`productivity/storage.py` 同一模式），`get()` 每次都从 SQLite 反序列化新副本，
+API handler 与后台 pipeline 线程之间不共享可变对象。
+
+数据库路径解析优先级：
+
+1. 环境变量 `NEKO_COMPANION_TASKS_DB_PATH`（测试 / 运维覆盖，支持 `:memory:`）；
+2. `config_manager.app_docs_dir` 下 `companion/generation_tasks.db`；
+3. 兜底：项目内 `memory/store/companion_generation_tasks.db`。
+
+单例通过 `get_task_store()` 惰性创建；`reset_task_store()` 供测试重置。
+
+### 阶段 checkpoint 与失败重试（`POST /generate/{task_id}/retry`）
+
+每个阶段完成的瞬间，其输出会写入任务的 `stage_results` 并立刻持久化
+（`analysis` / `system_prompt` / `memory_seeds` / `avatar_*` / `voice` /
+`llm_meta`）。任务失败后调用重试端点：
+
+- 仅 `failed` 任务可重试：任务不存在 `404`，`pending/running/completed` 返回 `409`；
+- 重试**从失败阶段恢复**：`stages_completed` 里的阶段直接跳过、输出从
+  checkpoint 还原——已完成的 LLM 阶段（analyze_corpus / extract_persona）
+  **不会重新调用 LLM**，也不会重新探测 LLM 路由；
+- `attempts` 计数随每次重试 +1（任务公开字段里可见）；
+- 支持 `?background=true`：立即返回 `202`，后台线程执行重试。
+
+### Background 模式（长任务异步）
+
+`POST /generate`、`POST /generate/upload` 与 retry 端点均接受
+`?background=true`：任务创建后由 daemon 线程执行 pipeline，接口立即返回
+`202` + 任务公开字段（`status` 为 `pending`/`running`）；调用方轮询
+`GET /generate/{task_id}` 直到 `status` 变为 `completed` / `failed`。默认
+（不带参数）仍为同步模式，行为与 Phase 3 完全一致（`201` + 最终状态）。
 
 ## 输出 Artifact
 
