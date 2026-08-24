@@ -19,9 +19,9 @@
       dataclass 误调 `model_dump()` 导致 500 → 改用 `dataclasses.asdict`；
       探测改为 `asyncio.to_thread` offload（遵循 async 零阻塞规则）；
       `companion/ai/open_source.py` docstring 与实际行为对齐。
-- [x] 单测基线：`tests/unit/test_companion_*.py` 共 9 个文件、110 个测试函数
-      （含参数化用例，收集数更多）。本次改动未触碰任何被测路径的既有断言；
-      `/ai/open-source` 路由级测试缺口记入 M1 交接（见下）。
+- [x] 单测基线：`tests/unit/test_companion_*.py` → **175 passed**（2026-08-24；
+      含 M1/M2/M3/M5 路由与 store 覆盖）。进展快照见
+      [PHASE5_PROGRESS.md](./PHASE5_PROGRESS.md)。
 
 ## 分支处置（open branches to ignore）
 
@@ -45,7 +45,13 @@
 - [x] **M1** Ollama 一键配置：`static/companion/ollama/`、`POST /ai/open-source/config`（[#9](https://github.com/KatouRyuuji/N.E.K.O/pull/9)）。
 - [x] **M2** Avatar Registry SQLite + `DELETE /avatar/{profile_id}`（[#8](https://github.com/KatouRyuuji/N.E.K.O/pull/8)）。
 - [x] **M3** 指标：`GET /metrics`、阶段耗时（[#10+ / main `5297af8f`]）。
-- [x] **M5** 工坊市场 UX：catalog 卡片元数据、封面资源、`GET /workshop/entry/{catalog_id}`（`cursor/companion-workshop-m5-3e93`）。
+- [x] **M5** 工坊市场 UX：catalog 卡片元数据、封面资源、`GET /workshop/entry/{catalog_id}`、`GET /workshop/asset/...`（`main` `b90efb72`）。
+
+## Phase 5 第二波（文档与现状）
+
+- [x] [PHASE5_PROGRESS.md](./PHASE5_PROGRESS.md)：M1–M3/M5 完成态、API 索引、下一认领顺序。
+- [x] 开发者手册 en/ja/zh Companion 章节：metrics、Ollama 向导页、工坊 entry/asset API。
+- [x] [ROADMAP.md](./ROADMAP.md) / [GAP_ANALYSIS.md](./GAP_ANALYSIS.md) / [ARCHITECTURE.md](./ARCHITECTURE.md) 与 `main` 实现对齐。
 
 ## M1 交接 — Ollama 一键配置向导（P0，已完成）
 

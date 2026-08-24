@@ -83,6 +83,27 @@ avatar 路由时经 `companion.avatar.store.get_avatar_registry()` 惰性恢复�
 可经 `NEKO_COMPANION_PACKAGES_ROOT` 覆盖）内、且含 `manifest.json` 的
 目录 —— 路径逃逸或非包目录返回 409 且注册表不变。
 
+## 运行指标（Phase 5 M3）
+
+`GET /api/companion/metrics` 在 async 路由内通过 `asyncio.to_thread` 调用
+`companion.metrics.collect_companion_metrics`：聚合生成任务 SQLite（成功率、
+平均耗时、LLM/Ollama/heuristic 路由占比）、workshop catalog 条目数、
+productivity 使用计数等只读统计，不引入新监控依赖。
+
+生成 pipeline 各阶段在 checkpoint 时记录耗时；`GET /generate/{task_id}` 响应
+包含 `stage_timings_ms` 字段供调试与 UI 展示。
+
+## 工坊目录与资源（Phase 5 M5）
+
+除 `GET /workshop/catalog` 与 `POST /workshop/publish/{task_id}` 外，目录页依赖：
+
+- `GET /workshop/entry/{catalog_id}` — bundle 元数据（封面、标签、简介、作者等）。
+- `GET /workshop/asset/{catalog_id}/{path}` — catalog 包内静态文件（封面图、预览资源），
+  路径规范化并拒绝目录逃逸。
+
+前端 `static/companion/workshop/` 以卡片网格 + 预览弹层消费上述 API，一键导入仍走
+`POST /import` 或既有 avatar 导入路径。
+
 ## API 前缀
 
 所有 Companion API 使用 `/api/companion` 前缀，**不带末尾斜杠**。
