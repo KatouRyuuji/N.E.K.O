@@ -291,6 +291,8 @@
         <div class="kv"><span class="k">LLM 路由</span><span class="v" id="r-llm"></span></div>
         <div class="btn-row">
           <button id="import-btn">导入为角色</button>
+          <button id="retry-btn" class="ghost" hidden>重试生成</button>
+          <button id="publish-btn" class="ghost">发布到工坊</button>
           <button id="manifest-btn" class="ghost">查看 manifest</button>
         </div>
         <div id="import-result"></div>
@@ -299,6 +301,7 @@
     </section>
   </main>
 
+  <script src="/static/companion/i18n.js"></script>
   <script src="/static/companion/wizard/wizard.js"></script>
 </body>
 </html>

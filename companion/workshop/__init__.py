@@ -13,15 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Companion generator package."""
+"""Companion creative workshop (Phase 4)."""
 
-from companion.generator.pipeline import run_pipeline_sync, retry_generation, start_generation
-from companion.generator.tasks import GenerationTask, TaskStatus, get_task_store
+from companion.workshop.export import (
+  build_workshop_listing,
+  export_workshop_bundle,
+  scan_workshop_catalog,
+)
 
 __all__ = [
-  "GenerationTask",
-  "TaskStatus",
-  "get_task_store",
-  "run_pipeline_sync",
-  "start_generation",
+  "build_workshop_listing",
+  "export_workshop_bundle",
+  "scan_workshop_catalog",
 ]

@@ -20,9 +20,25 @@ from __future__ import annotations
 from companion.models.profile import CompanionProfile
 
 
+def _character_name(profile: CompanionProfile, override: str | None) -> str:
+  if override and override.strip():
+    return override.strip()
+  return profile.resolved_memory_name()
+
+
 class CompanionRealtimeVoiceBridge:
   def __init__(self, profile: CompanionProfile) -> None:
     self.profile = profile
 
   def websocket_channel(self) -> str:
     return "websocket"
+
+  def connect_info(self, *, character_name: str | None = None) -> dict[str, str]:
+    name = _character_name(self.profile, character_name)
+    return {
+      "character_name": name,
+      "locale": self.profile.locale,
+      "transport": self.websocket_channel(),
+      "websocket_path": f"/ws/{name}",
+      "protocol": "neko-realtime-v1",
+    }

@@ -10,17 +10,25 @@
 
   const $ = (id) => document.getElementById(id);
 
-  const STAGES = [
-    ['ingest', '语料接收'],
-    ['analyze_corpus', '语料分析'],
-    ['extract_persona', '人设提取'],
-    ['configure_avatar', '形象配置'],
-    ['configure_voice', '声线配置'],
-    ['init_memory', '记忆初始化'],
-    ['package', '打包'],
+  const STAGE_KEYS = [
+    'ingest',
+    'analyze_corpus',
+    'extract_persona',
+    'configure_avatar',
+    'configure_voice',
+    'init_memory',
+    'package',
   ];
 
   let currentTaskId = null;
+  let tr = (key, fallback) => fallback || key;
+
+  function stages() {
+    return STAGE_KEYS.map((key) => [
+      key,
+      tr(`wizard.stages.${key}`, key),
+    ]);
+  }
 
   // ---------------------------------------------------------------- helpers
 
@@ -39,7 +47,7 @@
     $('progress-empty').style.display = 'none';
     const list = $('stage-list');
     list.replaceChildren();
-    for (const [key, label] of STAGES) {
+    for (const [key, label] of stages()) {
       const li = document.createElement('li');
       li.className = 'stage';
       if (completed.includes(key)) li.classList.add('done');
@@ -55,12 +63,14 @@
   }
 
   function renderRunning() {
-    setTaskState('busy', '生成中…');
-    renderStages([], STAGES[0][0], false);
+    setTaskState('busy', tr('wizard.generating', '生成中…'));
+    const first = STAGE_KEYS[0];
+    renderStages([], first, false);
     $('result').classList.remove('show');
     $('import-result').textContent = '';
     $('import-result').className = '';
     $('manifest-view').classList.remove('show');
+    $('retry-btn').hidden = true;
   }
 
   async function fetchTaskDetail(taskId) {
@@ -72,11 +82,17 @@
   async function renderFinished(task) {
     currentTaskId = task.id;
     renderStages(task.stages_completed || [], task.current_stage, task.status === 'failed');
+    const retryBtn = $('retry-btn');
     if (task.status === 'completed') {
-      setTaskState('ok', '生成完成');
-    } else {
-      setTaskState('err', `失败：${task.error || '未知错误'}`);
+      setTaskState('ok', tr('wizard.completed', '生成完成'));
+      retryBtn.hidden = true;
+    } else if (task.status === 'failed') {
+      setTaskState('err', `${tr('wizard.failed', '失败')}：${task.error || '?'}`);
+      retryBtn.hidden = !(task.retries_remaining > 0);
+      $('result').classList.add('show');
       return;
+    } else {
+      retryBtn.hidden = true;
     }
     const detail = await fetchTaskDetail(task.id);
     const artifact = detail && detail.artifact;
@@ -87,6 +103,19 @@
       ? `${llm.provider}${llm.model ? ` / ${llm.model}` : ''}${llm.degraded ? '（已降级）' : ''}`
       : '—';
     $('result').classList.add('show');
+  }
+
+  function applyStaticI18n() {
+    const title = document.querySelector('header h1 span');
+    if (title && title.nextSibling) {
+      document.querySelector('header h1').childNodes[1].textContent =
+        ` ${tr('wizard.title', '伴侣生成向导')}`;
+    }
+    const subtitle = document.querySelector('header p');
+    if (subtitle) subtitle.textContent = tr('wizard.subtitle', subtitle.textContent);
+    $('submit-btn').textContent = tr('wizard.startGenerate', '开始生成');
+    $('retry-btn').textContent = tr('wizard.retry', '重试生成');
+    $('publish-btn').textContent = tr('workshop.publish', '发布到工坊');
   }
 
   // ------------------------------------------------------------ file inputs
@@ -142,6 +171,52 @@
     }
   });
 
+  $('retry-btn').addEventListener('click', async () => {
+    if (!currentTaskId) return;
+    $('retry-btn').disabled = true;
+    renderRunning();
+    try {
+      const res = await fetch(
+        `${API}/generate/${encodeURIComponent(currentTaskId)}/retry`,
+        { method: 'POST' },
+      );
+      const task = await res.json();
+      if (!res.ok) {
+        setTaskState('err', task.detail || String(res.status));
+        return;
+      }
+      await renderFinished(task);
+    } catch (err) {
+      setTaskState('err', err.message || String(err));
+    } finally {
+      $('retry-btn').disabled = false;
+    }
+  });
+
+  $('publish-btn').addEventListener('click', async () => {
+    if (!currentTaskId) return;
+    const out = $('import-result');
+    out.className = '';
+    out.textContent = '…';
+    try {
+      const res = await fetch(
+        `${API}/workshop/publish/${encodeURIComponent(currentTaskId)}`,
+        { method: 'POST' },
+      );
+      const body = await res.json();
+      if (!res.ok) {
+        out.className = 'err';
+        out.textContent = body.detail || String(res.status);
+        return;
+      }
+      out.className = 'ok';
+      out.textContent = body.export_path || tr('workshop.publish', '已发布');
+    } catch (err) {
+      out.className = 'err';
+      out.textContent = err.message || String(err);
+    }
+  });
+
   // ----------------------------------------------------------------- import
 
   $('import-btn').addEventListener('click', async () => {
@@ -191,5 +266,10 @@
       view.textContent = `manifest 加载失败：${err.message || err}`;
     }
     view.classList.add('show');
+  });
+
+  window.companionI18n.load().then(({ t }) => {
+    tr = t;
+    applyStaticI18n();
   });
 })();

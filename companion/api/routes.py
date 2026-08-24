@@ -25,10 +25,12 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
-from companion.generator.pipeline import start_generation
+from companion.generator.pipeline import retry_generation, start_generation
 from companion.generator.tasks import TaskStatus, get_task_store
 from companion.generator.uploads import UploadError, save_generation_uploads
 from companion.models.generation import GenerationInput
+from companion.models.profile import CompanionProfile
+from companion.ai.facade import CompanionAI
 from companion.productivity.service import ProductivityService
 from companion.avatar.loader import AvatarPackageError, load_avatar_from_package
 from companion.avatar.profile import AvatarProfile
@@ -220,6 +222,75 @@ async def get_generation_task(task_id: str):
   if task.artifact is not None:
     payload["artifact"] = task.artifact.model_dump(mode="json")
   return payload
+
+
+@router.post("/generate/{task_id}/retry")
+async def retry_generation_task(task_id: str):
+  try:
+    task = await asyncio.to_thread(retry_generation, task_id)
+  except KeyError:
+    raise HTTPException(status_code=404, detail="task not found")
+  except ValueError as exc:
+    raise HTTPException(status_code=409, detail=str(exc))
+  return task.to_public_dict()
+
+
+class DialogueSessionRequest(BaseModel):
+  companion_name: str = Field(min_length=1, max_length=200)
+  character_name: str | None = None
+  locale: str = "zh-CN"
+  companion_id: str | None = None
+
+
+@router.post("/dialogue/session")
+async def create_dialogue_session(body: DialogueSessionRequest):
+  profile = CompanionProfile(
+    id=body.companion_id or body.companion_name,
+    name=body.companion_name,
+    display_name=body.companion_name,
+    locale=body.locale,
+    memory_character_name=body.character_name or body.companion_name,
+  )
+  ai = CompanionAI(profile)
+  override = body.character_name
+  return {
+    "profile_id": profile.id,
+    "text_chat": ai.chat.connect_info(character_name=override),
+    "realtime_voice": ai.realtime.connect_info(character_name=override),
+  }
+
+
+def _workshop_export_root() -> Path:
+  from utils.config_manager import get_config_manager
+
+  root = Path(get_config_manager().docs_dir) / "N.E.K.O" / "companions" / "workshop"
+  root.mkdir(parents=True, exist_ok=True)
+  return root
+
+
+@router.get("/workshop/catalog")
+async def workshop_catalog():
+  from companion.workshop.export import scan_workshop_catalog
+
+  entries = await asyncio.to_thread(scan_workshop_catalog, _workshop_export_root())
+  return {"entries": entries}
+
+
+@router.post("/workshop/publish/{task_id}", status_code=201)
+async def publish_workshop_entry(task_id: str):
+  from companion.workshop.export import export_workshop_bundle
+
+  store = get_task_store()
+  task = store.get(task_id)
+  if task is None:
+    raise HTTPException(status_code=404, detail="task not found")
+  try:
+    dest = await asyncio.to_thread(
+      export_workshop_bundle, task, output_root=_workshop_export_root()
+    )
+  except ValueError as exc:
+    raise HTTPException(status_code=409, detail=str(exc))
+  return {"published": True, "export_path": str(dest)}
 
 
 @router.get("/generate/{task_id}/manifest")

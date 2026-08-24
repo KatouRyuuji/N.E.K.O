@@ -438,6 +438,31 @@ def run_pipeline_sync(task: GenerationTask, output_root: Path | None = None) -> 
 def start_generation(gen_input: GenerationInput) -> GenerationTask:
   store = get_task_store()
   task = store.create(gen_input)
+  task.attempt_count += 1
+  store.update(task)
+  try:
+    run_pipeline_sync(task)
+  except Exception:
+    pass
+  return task
+
+
+def retry_generation(task_id: str) -> GenerationTask:
+  """Re-run a failed task when retries remain."""
+  store = get_task_store()
+  task = store.get(task_id)
+  if task is None:
+    raise KeyError(task_id)
+  if not task.can_retry():
+    raise ValueError("task is not eligible for retry")
+  task.retry_count += 1
+  task.attempt_count += 1
+  task.status = TaskStatus.PENDING
+  task.error = None
+  task.current_stage = None
+  task.stages_completed = []
+  task.artifact = None
+  store.update(task)
   try:
     run_pipeline_sync(task)
   except Exception:

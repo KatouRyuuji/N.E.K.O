@@ -21,9 +21,11 @@
 - [ ] 特效/装饰配置与 Live2D 表情联动
 - [x] 生成向导前端（`static/companion/wizard/`，多模态上传 + 一键导入）
 
-## Phase 4 — 跨平台与商业化
+## Phase 4 — 跨平台与商业化（进行中）
 
 - [ ] 移动端 Companion 同步协议
-- [ ] 创意工坊 `.neko-companion` 上架
+- [x] 创意工坊 `.neko-companion` 上架（catalog + publish API + workshop UI）
 - [ ] 开源 AI（Ollama）一键配置向导
-- [ ] 性能与 HA：任务队列持久化、失败重试、监控指标
+- [x] 性能与 HA：生成任务 SQLite 持久化、失败重试 API
+- [x] 实时对话接入元数据（`/api/companion/dialogue/session`）
+- [x] Companion 向导/工坊 8 语言 i18n（`static/locales` + `companion/i18n.js`）
