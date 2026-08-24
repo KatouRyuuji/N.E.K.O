@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 
@@ -138,7 +139,9 @@ async def companion_platform_info():
 
 @router.post("/generate")
 async def create_generation_task(body: GenerationInput):
-  task = start_generation(body)
+  # LLM + disk IO inside the sync pipeline: offload so the shared event loop
+  # (main/memory/agent subsystems) is never blocked by a generation task.
+  task = await asyncio.to_thread(start_generation, body)
   return JSONResponse(
     status_code=201,
     content=task.to_public_dict(),
