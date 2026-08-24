@@ -34,5 +34,6 @@ Companion Platform（`companion/` 包，Phase 4 已集成）把语料、提示�
 - **API** — 全部位于 `/api/companion/*` 前缀（不带末尾斜杠）：`GET /api/companion/health`、生成（`POST /api/companion/generate`、`POST /api/companion/generate/upload`）、导入（`POST /api/companion/import`）、形象热替换（`/api/companion/avatar/*`）、生产力（`/api/companion/productivity/*`）、工坊（`GET /api/companion/workshop/catalog`、`POST /api/companion/workshop/publish/{task_id}`）。
 - **对话会话** — `GET /api/companion/session/{character_name}` 返回文字 + 实时语音的聚合会话元数据（websocket 路由、脱敏 provider tier、协议帧）；`POST /api/companion/dialogue/session` 由 companion profile 生成双通道 connect info。
 - **长任务生成** — 生成端点支持 `?background=true`（立即返回 `202`，轮询 `GET /api/companion/generate/{task_id}`）；失败任务经 `POST /api/companion/generate/{task_id}/retry` 从失败阶段恢复——已完成的 LLM 阶段不会重跑。
+- **本地开源 AI 状态** — `GET /api/companion/ai/open-source` 探测本地 Ollama daemon（`OLLAMA_HOST`，默认 `http://127.0.0.1:11434`），返回可用性与解析出的模型 / base-URL 路由配置；未配置云端 key 时，生成 Pipeline 会自动降级到该路由（启发式为最终兜底）。
 
 所有 Python 示例都使用 `uv run`。若文档与同 revision 的入口、loader 或 workflow 冲突，以当前代码为准并报告文档漂移。

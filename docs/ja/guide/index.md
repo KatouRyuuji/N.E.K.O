@@ -34,5 +34,6 @@ Companion Platform（`companion/` package、Phase 4 で統合済み）は corpus
 - **API** — すべて `/api/companion/*` prefix（末尾スラッシュなし）：`GET /api/companion/health`、生成（`POST /api/companion/generate`、`POST /api/companion/generate/upload`）、import（`POST /api/companion/import`）、avatar hot swap（`/api/companion/avatar/*`）、productivity（`/api/companion/productivity/*`）、workshop（`GET /api/companion/workshop/catalog`、`POST /api/companion/workshop/publish/{task_id}`）。
 - **対話セッション** — `GET /api/companion/session/{character_name}` は text + realtime voice の集約セッション metadata（websocket routing、sanitized provider tier、protocol frame）を返します。`POST /api/companion/dialogue/session` は companion profile から両チャネルの connect info を生成します。
 - **長時間生成** — 生成 endpoint は `?background=true` に対応（即時 `202`、`GET /api/companion/generate/{task_id}` を polling）。失敗タスクは `POST /api/companion/generate/{task_id}/retry` で失敗 stage から再開し、完了済み LLM stage は再実行されません。
+- **ローカル open-source AI status** — `GET /api/companion/ai/open-source` はローカル Ollama daemon（`OLLAMA_HOST`、デフォルト `http://127.0.0.1:11434`）を probe し、可用性と解決済みの model / base-URL routing 設定を返します。クラウド key 未設定の場合、生成 pipeline は自動的にこの route へ fallback します（heuristics は最終手段）。
 
 Python examples はすべて `uv run`。同 revision の entrypoint/loader/workflow と異なる場合は current code を優先し、docs drift を報告してください。
