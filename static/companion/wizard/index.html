@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Companion Generator</title>
+  <link rel="stylesheet" href="/static/css/base.css" />
+  <style>
+    .wizard { max-width: 640px; margin: 2rem auto; padding: 1.5rem; }
+    .wizard h1 { margin-bottom: 1rem; }
+    .field { margin-bottom: 1rem; }
+    .field label { display: block; margin-bottom: 0.25rem; }
+    .field input, .field textarea { width: 100%; }
+    #status { margin-top: 1rem; white-space: pre-wrap; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <div class="wizard">
+    <h1>专属虚拟伴侣生成向导</h1>
+    <p>输入语料与配置，程序化分析并生成可导入的伴侣包。</p>
+    <form id="gen-form">
+      <div class="field">
+        <label for="name">伴侣名称</label>
+        <input id="name" name="companion_name" required />
+      </div>
+      <div class="field">
+        <label for="corpus">语料文本</label>
+        <textarea id="corpus" name="corpus_text" rows="6" placeholder="聊天记录、设定片段…"></textarea>
+      </div>
+      <div class="field">
+        <label for="prompt">系统提示词（可选）</label>
+        <textarea id="prompt" name="system_prompt" rows="3"></textarea>
+      </div>
+      <div class="field">
+        <label for="live2d">Live2D 模型 ID（可选）</label>
+        <input id="live2d" name="live2d_model_id" />
+      </div>
+      <button type="submit">开始生成</button>
+    </form>
+    <pre id="status"></pre>
+  </div>
+  <script>
+    const form = document.getElementById('gen-form');
+    const statusEl = document.getElementById('status');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      statusEl.textContent = '提交中…';
+      const body = {
+        companion_name: form.companion_name.value.trim(),
+        corpus_text: form.corpus_text.value,
+        system_prompt: form.system_prompt.value || null,
+        live2d_model_id: form.live2d_model_id.value || null,
+      };
+      const res = await fetch('/api/companion/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const task = await res.json();
+      statusEl.textContent = JSON.stringify(task, null, 2);
+      if (task.id && task.status === 'completed') {
+        const m = await fetch(`/api/companion/generate/${task.id}/manifest`);
+        statusEl.textContent += '\n\n--- manifest ---\n' + JSON.stringify(await m.json(), null, 2);
+      }
+    });
+  </script>
+</body>
+</html>

@@ -157,6 +157,7 @@ from main_routers.agent_router import router as agent_router  # noqa
 from main_routers.avatar_drop_router import router as avatar_drop_router  # noqa
 from main_routers.card_assist_router import router as card_assist_router  # noqa
 from main_routers.capture_router import router as capture_router  # noqa
+from main_routers.companion_router import router as companion_router  # noqa
 from main_routers.characters_router import router as characters_router  # noqa
 from main_routers.cloudsave_router import router as cloudsave_router  # noqa
 from main_routers.config_router import router as config_router  # noqa
@@ -398,6 +399,7 @@ app.include_router(icebreaker_router)
 app.include_router(game_router)
 app.include_router(card_assist_router)
 app.include_router(capture_router)
+app.include_router(companion_router)
 # VMC Protocol OSC sender: REST control plane plus an isolated per-frame
 # WebSocket data plane at /api/vmc/ws (kept off the chat/session channel).
 app.include_router(vmc_router)
