@@ -4984,6 +4984,32 @@
             "title": "コンパニオン工房",
             "empty": "公開されたコンパニオンはまだありません。",
             "publish": "工房に公開"
+        },
+        "ollama": {
+            "title": "Ollama ローカルモデル設定",
+            "subtitle": "ローカル Ollama を検出し、モデルを選んでワンクリックでルーティング",
+            "wizardLink": "ローカルモデル（Ollama）",
+            "backToWizard": "生成画面に戻る",
+            "probeTitle": "検出状態",
+            "statusChecking": "検出中…",
+            "statusAvailable": "ローカル Ollama を検出しました",
+            "statusUnavailable": "ローカル Ollama が見つかりません",
+            "recheck": "再検出",
+            "baseUrlLabel": "サーバー URL",
+            "modelCountLabel": "インストール済みモデル",
+            "configTitle": "モデルを選択",
+            "noModels": "Ollama は起動していますが、モデルが未インストールです。まず取得してください：",
+            "modelLabel": "モデル",
+            "tiersLabel": "適用先",
+            "tierSummary": "コンパニオン生成 / 要約（summary）",
+            "tierConversation": "テキストチャット（conversation）",
+            "apply": "設定を保存",
+            "applying": "保存中…",
+            "applied": "保存しました。生成はこのローカルモデルを使用します",
+            "applyFailed": "保存に失敗しました",
+            "installTitle": "インストールガイド",
+            "installIntro": "この端末では Ollama が起動していません。OS に合わせてインストール・起動後、「再検出」を押してください。",
+            "pullHint": "続いてモデルをインストール（例）："
         }
     }
 }

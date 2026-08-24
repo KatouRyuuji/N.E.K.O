@@ -129,12 +129,60 @@ live 状态；单测 / 独立工具环境降级为 `runtime.available = false` �
 纯元数据模式。tier 解析涉及同步读 `core_config.json`，端点内经
 `asyncio.to_thread` offload，遵守单进程零阻塞规范。
 
-## 开源 AI（Phase 2 已落地，向导 UI 见 Phase 5）
+## 开源 AI（Phase 2 探测 + Phase 5 M1 一键配置向导）
 
 - `companion/generator/open_source.py` — Ollama 探测（`GET /api/tags`）与
   `get_model_api_config` 形状的路由解析，供生成 pipeline 在 `summary` tier
   未配置时降级使用（详见 COMPANION_GENERATOR.md「LLM 集成」）。
 - `companion/ai/open_source.py` — 运行时探测/解析，经
-  `GET /api/companion/ai/open-source` 暴露可用性与当前生效配置。
-- 一键**配置向导 UI** 尚未实现，为 Phase 5 M1（P0），见
-  [PHASE5_PLAN.md](./PHASE5_PLAN.md)。
+  `GET /api/companion/ai/open-source` 暴露可用性、当前生效配置与
+  **已安装模型列表**（`models`，供向导页做模型选择）；探测失败时返回
+  `available: false` + 探测详情（daemon 未运行是正常状态，不是 500）。
+
+### M1 — Ollama 一键配置向导（Phase 5，P0）
+
+目标：全新机器（无云端 key）从向导进入 → 检测到 Ollama → 选模型 →
+生成 companion 全程不碰 heuristic 降级。
+
+**向导页** `static/companion/ollama/`（`index.html` + `ollama.js`，与生成
+向导同一套暗色玻璃拟态设计变量 + `static/companion/i18n.js`，文案
+`companion.ollama.*` 8 locale 同步）：
+
+- 探测状态展示（`GET /api/companion/ai/open-source`）+「重新检测」；
+- 检测到 daemon：已安装模型下拉选择 + 应用 tier 勾选
+  （默认 `summary`，可加 `conversation`）；daemon 在跑但无模型时给出
+  `ollama pull` 提示；
+- 未检测到：按 OS（macOS / Windows / Linux）分支的安装指引，UA 命中的
+  OS 高亮；
+- 生成向导页 header 提供入口链接（`companion.ollama.wizardLink`）。
+
+**写入端点** `POST /api/companion/ai/open-source/config`（无末尾斜杠）：
+
+```json
+{"model": "qwen3:8b", "base_url": "", "tiers": ["summary"]}
+```
+
+- 写盘前**重新探测** daemon：不可达 `502`（陈旧页面永远写不进不可达
+  路由），模型已被卸载 `409`，不支持的 tier `422`；
+- 持久化复用 config_manager 的 core_config.json 写入路径
+  （`companion/ai/open_source.py` 的 `apply_ollama_tier_config`）：
+  load-then-merge 后 `save_json_config`，与 `POST /core_api` 同构，
+  不相关字段不丢失；端点内经 `asyncio.to_thread` offload（单进程
+  零阻塞规范）；
+- 落盘字段与 API 设置页同一套 per-tier custom-API 字段：
+  `enableCustomApi: true` + `{tier}ModelProvider: "custom"` /
+  `{tier}ModelUrl: <base>/v1`（OpenAI 兼容 facade）/
+  `{tier}ModelId: <model>` / `{tier}ModelApiKey: "ollama"`（占位，
+  Ollama 忽略但 OpenAI SDK 要求非空）——`get_model_api_config(<tier>)`
+  无需任何新配置管线即可命中；
+- 可配置 tier 仅限纯 chat-completion 档：`conversation` / `summary` /
+  `correction` / `emotion` / `vision` / `agent`；`omni` / `tts` 带
+  provider 语义（api_type / 声线），本地 Ollama 无法承接，刻意排除。
+
+默认 tier 是 `summary`：companion 生成 pipeline 的 LLM 路由从 `summary`
+tier 解析（COMPANION_GENERATOR.md「LLM 集成」优先级 1），写入后生成任务
+直接走 tier 路由，不再依赖降级探测。
+
+单测：`tests/unit/test_companion_ollama_wizard.py`（httpx 与 config 写入
+全 mock；覆盖探测失败 502 / 模型未安装 409 / 非法 tier 422 / 合并写盘 /
+GET 不可用路径序列化 / 8 locale i18n key 同步契约）。

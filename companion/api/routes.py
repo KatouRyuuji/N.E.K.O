@@ -28,7 +28,8 @@ Route groups, all mounted through ``main_routers/companion_router``:
   restored on first access, ``DELETE /avatar/{profile_id}`` with safe
   package-path deletion (Phase 5 M2);
 - productivity: ``/productivity/*`` (pomodoro / todos / memos / media);
-- open-source probe: ``/ai/open-source``; TTS preview: ``/tts/preview``.
+- open-source probe: ``/ai/open-source``; one-click Ollama tier config
+  (Phase 5 M1): ``/ai/open-source/config``; TTS preview: ``/tts/preview``.
 """
 
 from __future__ import annotations
@@ -110,18 +111,81 @@ async def companion_open_source_status():
   """
   from dataclasses import asdict
 
-  from companion.ai.open_source import probe_ollama, resolve_open_source_provider
+  from companion.ai.open_source import probe_ollama
 
-  provider = await asyncio.to_thread(resolve_open_source_provider)
-  if provider is None:
-    probe = await asyncio.to_thread(probe_ollama)
-    return {"available": False, "providers": {"ollama": asdict(probe)}}
+  # Sync httpx probe: offload so the shared event loop is never blocked.
+  ollama = await asyncio.to_thread(probe_ollama)
+  if not ollama.available:
+    return {"available": False, "providers": {"ollama": asdict(ollama)}}
   return {
     "available": True,
-    "active": provider.name,
+    "active": ollama.name,
     "config": {
-      "model": provider.model,
-      "base_url": provider.base_url,
+      "model": ollama.model,
+      "base_url": ollama.base_url,
+    },
+    "models": (ollama.metadata or {}).get("models", []),
+  }
+
+
+class OpenSourceConfigRequest(BaseModel):
+  model: str = Field(min_length=1, max_length=200)
+  base_url: str = ""
+  tiers: list[str] = Field(default_factory=lambda: ["summary"])
+
+
+@router.post("/ai/open-source/config")
+async def configure_open_source_provider(body: OpenSourceConfigRequest):
+  """Persist a selected local Ollama model to provider tiers (Phase 5 M1).
+
+  Re-probes the daemon before writing so a stale wizard page can never
+  persist an unreachable route: unreachable daemon → ``502``, model no
+  longer installed → ``409``, unsupported tier → ``422``. On success the
+  tier patch is merged into core_config.json through the config manager
+  (offloaded — sync file IO must stay off the shared event loop).
+  """
+  from companion.ai.open_source import (
+    OLLAMA_CONFIG_TIER_PREFIXES,
+    apply_ollama_tier_config,
+    ollama_base_url,
+  )
+  from companion.generator.open_source import detect_ollama
+
+  tiers = [t.strip() for t in body.tiers if t and t.strip()]
+  if not tiers:
+    raise HTTPException(status_code=422, detail="at least one tier is required")
+  unknown = [t for t in tiers if t not in OLLAMA_CONFIG_TIER_PREFIXES]
+  if unknown:
+    raise HTTPException(
+      status_code=422, detail=f"unsupported tiers: {', '.join(unknown)}"
+    )
+
+  base = (body.base_url or ollama_base_url()).rstrip("/")
+  status = await asyncio.to_thread(detect_ollama, base)
+  if not status.available:
+    raise HTTPException(
+      status_code=502,
+      detail=f"Ollama daemon unreachable at {base}: {status.error or 'probe failed'}",
+    )
+  model = body.model.strip()
+  if status.models and model not in status.models:
+    raise HTTPException(
+      status_code=409,
+      detail=f"model '{model}' is not installed (run: ollama pull {model})",
+    )
+
+  from utils.config_manager import get_config_manager
+
+  patch = await asyncio.to_thread(
+    apply_ollama_tier_config, model, status.base_url, tiers, get_config_manager()
+  )
+  return {
+    "saved": True,
+    "provider": "ollama",
+    "tiers": tiers,
+    "config": {
+      "model": model,
+      "base_url": patch[f"{OLLAMA_CONFIG_TIER_PREFIXES[tiers[0]]}ModelUrl"],
     },
   }
 

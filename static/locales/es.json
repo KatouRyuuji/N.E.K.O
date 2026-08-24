@@ -4984,6 +4984,32 @@
             "title": "Taller de compañeros",
             "empty": "Aún no hay compañeros publicados.",
             "publish": "Publicar en el taller"
+        },
+        "ollama": {
+            "title": "Configuración del modelo local Ollama",
+            "subtitle": "Detecta Ollama local, elige un modelo y enrútalo con un clic",
+            "wizardLink": "Modelo local (Ollama)",
+            "backToWizard": "Volver al asistente",
+            "probeTitle": "Estado de detección",
+            "statusChecking": "Comprobando…",
+            "statusAvailable": "Ollama local detectado",
+            "statusUnavailable": "No se detectó Ollama local",
+            "recheck": "Volver a comprobar",
+            "baseUrlLabel": "URL del servidor",
+            "modelCountLabel": "Modelos instalados",
+            "configTitle": "Elegir modelo",
+            "noModels": "Ollama está en ejecución pero aún no hay modelos instalados. Descarga uno primero:",
+            "modelLabel": "Modelo",
+            "tiersLabel": "Aplicar a",
+            "tierSummary": "Generación de compañeros / resúmenes (summary)",
+            "tierConversation": "Chat de texto (conversation)",
+            "apply": "Guardar configuración",
+            "applying": "Guardando…",
+            "applied": "Guardado: la generación usará este modelo local",
+            "applyFailed": "Error al guardar",
+            "installTitle": "Guía de instalación",
+            "installIntro": "Ollama no se está ejecutando en este equipo. Instálalo e inícialo según tu sistema operativo y pulsa «Volver a comprobar».",
+            "pullHint": "Luego instala un modelo (ejemplo):"
         }
     }
 }

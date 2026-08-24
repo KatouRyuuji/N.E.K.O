@@ -4984,6 +4984,32 @@
             "title": "伴侶創意工坊",
             "empty": "尚無已上架的伴侶包。",
             "publish": "發布到工坊"
+        },
+        "ollama": {
+            "title": "Ollama 本機模型設定",
+            "subtitle": "偵測本機 Ollama，選擇模型，一鍵寫入本機模型路由",
+            "wizardLink": "本機模型（Ollama）",
+            "backToWizard": "返回生成精靈",
+            "probeTitle": "偵測狀態",
+            "statusChecking": "正在偵測…",
+            "statusAvailable": "已偵測到本機 Ollama",
+            "statusUnavailable": "未偵測到本機 Ollama",
+            "recheck": "重新偵測",
+            "baseUrlLabel": "服務位址",
+            "modelCountLabel": "已安裝模型",
+            "configTitle": "選擇模型",
+            "noModels": "Ollama 正在執行，但尚未安裝任何模型。請先拉取一個模型：",
+            "modelLabel": "選擇模型",
+            "tiersLabel": "套用到",
+            "tierSummary": "伴侶生成 / 摘要（summary）",
+            "tierConversation": "文字對話（conversation）",
+            "apply": "儲存設定",
+            "applying": "儲存中…",
+            "applied": "已儲存，伴侶生成將使用該本機模型",
+            "applyFailed": "儲存失敗",
+            "installTitle": "安裝指引",
+            "installIntro": "本機尚未執行 Ollama。依作業系統完成安裝並啟動後，點選「重新偵測」。",
+            "pullHint": "然後安裝一個模型（範例）："
         }
     }
 }
