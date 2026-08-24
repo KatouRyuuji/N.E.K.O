@@ -25,4 +25,14 @@ Project N.E.K.O. 是包含形象渲染、实时/文本交互、持久记忆、Ag
 | 开发插件 | [插件快速开始](/zh-CN/plugins/quick-start) |
 | 部署 | [部署](/zh-CN/deployment/) |
 
+## Companion Platform（虚拟伴侣平台）
+
+Companion Platform（`companion/` 包，Phase 4 已集成）把语料、提示词与参考素材加工为可导入的 `.neko-companion` 包，并运行在 N.E.K.O. 核心之上。设计文档见仓库内 `docs/companion-platform/`。
+
+- **生成向导** — `/static/companion/wizard/index.html`：多模态上传（语料 / 参考图 / 音频 / 视频 / Live2D 包）、7 阶段进度、一键「导入为角色」。
+- **创意工坊页** — `/static/companion/workshop/index.html`：浏览本地已发布的 `.neko-companion` 目录，并可将已完成的生成任务发布上架。
+- **API** — 全部位于 `/api/companion/*` 前缀（不带末尾斜杠）：`GET /api/companion/health`、生成（`POST /api/companion/generate`、`POST /api/companion/generate/upload`）、导入（`POST /api/companion/import`）、形象热替换（`/api/companion/avatar/*`）、生产力（`/api/companion/productivity/*`）、工坊（`GET /api/companion/workshop/catalog`、`POST /api/companion/workshop/publish/{task_id}`）。
+- **对话会话** — `GET /api/companion/session/{character_name}` 返回文字 + 实时语音的聚合会话元数据（websocket 路由、脱敏 provider tier、协议帧）；`POST /api/companion/dialogue/session` 由 companion profile 生成双通道 connect info。
+- **长任务生成** — 生成端点支持 `?background=true`（立即返回 `202`，轮询 `GET /api/companion/generate/{task_id}`）；失败任务经 `POST /api/companion/generate/{task_id}/retry` 从失败阶段恢复——已完成的 LLM 阶段不会重跑。
+
 所有 Python 示例都使用 `uv run`。若文档与同 revision 的入口、loader 或 workflow 冲突，以当前代码为准并报告文档漂移。
