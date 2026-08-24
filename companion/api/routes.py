@@ -138,6 +138,52 @@ async def companion_platform_info():
   }
 
 
+@router.get("/session/{character_name}")
+async def companion_session_metadata(character_name: str):
+  """Dialogue session metadata for one character (text chat + realtime voice).
+
+  Aggregates the two Phase 4 facades: websocket routing (``/ws/{name}``),
+  each channel's provider tier (sanitized — the api_key never leaves the
+  server), and the ready-to-send protocol frames. When the main server
+  runtime is booted the live session state is included and an unknown
+  character 404s (the same registration check ``websocket_router`` performs
+  on connect); standalone/unit environments degrade to metadata-only with
+  ``runtime.available = false``.
+  """
+  from companion.ai.chat import CompanionChatBridge
+  from companion.ai.realtime_voice import CompanionRealtimeVoiceBridge
+  from companion.ai.runtime import live_session_snapshot
+  from companion.models.profile import CompanionProfile
+
+  snapshot = live_session_snapshot(character_name)
+  if snapshot is not None and not snapshot.get("registered"):
+    raise HTTPException(status_code=404, detail="character not found")
+
+  profile = CompanionProfile(
+    id=f"session:{character_name}",
+    name=character_name,
+    display_name=character_name,
+  )
+  chat = CompanionChatBridge(profile)
+  realtime = CompanionRealtimeVoiceBridge(profile)
+  # Tier resolution reads core_config.json synchronously — offload both so
+  # the shared event loop (main/memory/agent subsystems) is never blocked.
+  chat_meta, realtime_meta = await asyncio.gather(
+    asyncio.to_thread(chat.session_metadata),
+    asyncio.to_thread(realtime.session_metadata),
+  )
+  return {
+    "character_name": character_name,
+    "websocket_url": chat.websocket_url(),
+    "runtime": {
+      "available": snapshot is not None,
+      "session": snapshot,
+    },
+    "chat": chat_meta,
+    "realtime_voice": realtime_meta,
+  }
+
+
 @router.post("/generate")
 async def create_generation_task(body: GenerationInput):
   # LLM + disk IO inside the sync pipeline: offload so the shared event loop
