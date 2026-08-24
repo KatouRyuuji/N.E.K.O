@@ -34,6 +34,23 @@ _productivity = ProductivityService()
 _avatar_registry = AvatarRegistry()
 
 
+@router.get("/ai/open-source")
+async def companion_open_source_status():
+  from companion.ai.open_source import probe_ollama, resolve_open_source_provider
+
+  provider = resolve_open_source_provider()
+  if provider is None:
+    return {"available": False, "providers": {"ollama": probe_ollama().model_dump()}}
+  return {
+    "available": True,
+    "active": provider.name,
+    "config": {
+      "model": provider.model,
+      "base_url": provider.base_url,
+    },
+  }
+
+
 @router.get("/health")
 async def companion_health():
   return {"status": "ok", "module": "companion-platform", "version": "0.1.0"}

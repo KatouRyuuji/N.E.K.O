@@ -68,6 +68,15 @@ def test_start_generation_api_flow(tmp_path, monkeypatch):
     assert task.artifact is not None
 
 
+def test_open_source_probe_unavailable():
+  from companion.ai.open_source import probe_ollama, resolve_open_source_provider
+
+  provider = probe_ollama(timeout=0.001)
+  assert provider.name == "ollama"
+  assert provider.available is False
+  assert resolve_open_source_provider() is None
+
+
 def test_productivity_and_avatar_modules():
   from companion.productivity.service import ProductivityService
   from companion.avatar.registry import AvatarRegistry

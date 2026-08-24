@@ -20,6 +20,7 @@ from __future__ import annotations
 from companion.ai.bootstrap import bootstrap_from_artifact
 from companion.ai.chat import CompanionChatBridge
 from companion.ai.memory_bridge import CompanionMemoryBridge
+from companion.ai.open_source import resolve_open_source_provider, to_api_config
 from companion.ai.persona import CompanionPersonaBridge
 from companion.ai.realtime_voice import CompanionRealtimeVoiceBridge
 from companion.ai.tts_bridge import CompanionTTSBridge
@@ -40,3 +41,9 @@ class CompanionAI:
 
   def bootstrap_from_generation(self, artifact: GenerationArtifact) -> dict:
     return bootstrap_from_artifact(self.profile, artifact)
+
+  def open_source_config(self) -> dict | None:
+    provider = resolve_open_source_provider()
+    if provider is None:
+      return None
+    return to_api_config(provider)
