@@ -44,3 +44,21 @@ COMPANION_OLLAMA_DETECT_TIMEOUT_SECONDS = 2.0
 """本地 Ollama 探测（GET /api/tags）的 timeout（秒）。
 - 探测目标是 loopback 端口，正常几毫秒返回；2s 足够覆盖冷启动的
   Ollama daemon，同时保证未安装 Ollama 时 pipeline 快速走 fallback。"""
+
+COMPANION_UPLOAD_MAX_FILE_BYTES = 100 * 1024 * 1024
+"""生成向导 multipart 上传单文件字节上限（100 MB）。
+- 用途：`companion/generator/uploads.py`。参考视频/音频可能较大，但这是
+  本地单用户应用，100 MB 足够覆盖典型的参考素材，同时防止误传超大文件
+  写爆用户文档目录。超限文件整个上传请求以 413 拒绝。"""
+
+COMPANION_UPLOAD_MAX_FILES_PER_FIELD = 20
+"""生成向导单个多文件字段（语料/参考图/音频/视频）的文件数上限。
+- 防御性上限：向导 UI 正常一次选几个文件，20 足够；超限以 413 拒绝，
+  防止一次 multipart 请求塞入海量小文件。"""
+
+COMPANION_CORPUS_FILE_MERGE_MAX_CHARS = 200_000
+"""上传语料文本文件合并进 `corpus_text` 的总字符上限。
+- 用途：upload 端点把可解码的文本语料（.txt/.md/.json 等）拼接进
+  `corpus_text` 供 analyze_corpus 阶段使用；LLM 侧另有
+  COMPANION_CORPUS_MAX_TOKENS 的 token 截断，这里是磁盘→内存的一次
+  粗粒度上限，防止超大语料文件占用内存。"""

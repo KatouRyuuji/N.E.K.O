@@ -25,6 +25,7 @@ at all — the pipeline never hard-fails because of a missing/unreachable LLM.
 from __future__ import annotations
 
 import json
+import shutil
 import uuid
 from pathlib import Path
 from typing import Any
@@ -254,6 +255,44 @@ def _extract_persona_fallback(
   return base_prompt, _default_memory_seeds(gen_input)
 
 
+# ── package stage helpers ──────────────────────────────────────────────────
+
+
+def _bundle_live2d_package(source_path: str, package_dir: Path) -> str | None:
+  """Copy a user-provided Live2D package into ``avatar/live2d/``.
+
+  Makes the generated `.neko-companion` package self-contained so the
+  one-click import (``POST /generate/{task_id}/import``) can register the
+  avatar without referencing the original upload location. Best-effort: an
+  unusable source path degrades to a metadata-only package instead of
+  failing the whole generation task.
+
+  Returns the manifest ``resource_paths["live2d"]`` hint, or None when
+  nothing was bundled.
+  """
+  from companion.avatar.loader import AvatarPackageError, discover_live2d_entry
+
+  try:
+    entry = discover_live2d_entry(source_path)
+  except AvatarPackageError:
+    logger.warning(
+      "Companion generator: no Live2D model in package path %r, skipping bundle",
+      source_path,
+    )
+    return None
+  model_dir = entry.parent
+  dest = package_dir / "avatar" / "live2d" / model_dir.name
+  try:
+    shutil.copytree(model_dir, dest, dirs_exist_ok=True)
+  except OSError:
+    logger.warning(
+      "Companion generator: failed to copy Live2D model from %s", model_dir,
+      exc_info=True,
+    )
+    return None
+  return "avatar/live2d"
+
+
 # ── pipeline ───────────────────────────────────────────────────────────────
 
 
@@ -345,17 +384,24 @@ def run_pipeline_sync(task: GenerationTask, output_root: Path | None = None) -> 
           memory_character_name=gen_input.companion_name,
           metadata={"generator_task_id": task.id},
         )
+        package_dir = out_root / f"{gen_input.companion_name}_{task.id[:8]}"
+        package_dir.mkdir(parents=True, exist_ok=True)
+        resource_paths = {
+          "reference_images": ",".join(gen_input.reference_images),
+          "reference_video": ",".join(gen_input.reference_video),
+        }
+        if gen_input.live2d_package_path:
+          live2d_hint = _bundle_live2d_package(
+            gen_input.live2d_package_path, package_dir
+          )
+          if live2d_hint:
+            resource_paths["live2d"] = live2d_hint
         manifest = CompanionManifest(
           profile=profile,
           memory_seeds=memory_seeds,
-          resource_paths={
-            "reference_images": ",".join(gen_input.reference_images),
-            "reference_video": ",".join(gen_input.reference_video),
-          },
+          resource_paths=resource_paths,
           generator_metadata={"analysis": analysis, "llm": llm_meta},
         )
-        package_dir = out_root / f"{gen_input.companion_name}_{task.id[:8]}"
-        package_dir.mkdir(parents=True, exist_ok=True)
         manifest_path = package_dir / "manifest.json"
         manifest_path.write_text(
           json.dumps(manifest.to_package_dict(), ensure_ascii=False, indent=2),
