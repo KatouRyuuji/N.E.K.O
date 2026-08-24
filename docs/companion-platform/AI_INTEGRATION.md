@@ -8,8 +8,9 @@
 |------|----------|
 | `memory_bridge.py` | memory server `GET /new_dialog/{lanlan_name}` |
 | `persona.py` | `characters_router` 角色卡双向映射 + 注册 |
-| `chat.py` | ChatCompletion / `react-neko-chat` 会话角色名 |
-| `realtime_voice.py` | `websocket_router` Realtime API |
+| `chat.py` | `websocket_router` 文字会话协议 + `conversation` tier + `react-neko-chat` |
+| `realtime_voice.py` | `websocket_router` 语音会话协议 + `realtime` tier / `api_type` |
+| `runtime.py` | 两个对话 facade 共用的运行时解析（config manager / live session / 脱敏投影） |
 | `tts_bridge.py` | `utils/tts/` 多 provider |
 | `bootstrap.py` | 从 GenerationArtifact 写入记忆种子（persona seeds） |
 
@@ -63,6 +64,70 @@
 流程：读 manifest → 注册角色卡 → 以**最终档案名**为 key 写入记忆种子 →
 best-effort 注册/激活包内 Live2D avatar（缺失不致命，回 `avatar_error`）→
 best-effort 通知 memory server `/reload`。
+
+## 实时文字/语音对话接入（Phase 4）
+
+### 调研结论：对话通道只有一条
+
+N.E.K.O. 的文字与语音对话共用**同一条**按角色划分的 WebSocket
+（`main_routers/websocket_router.py` 的 `/ws/{lanlan_name}`），差异只在
+`start_session` 的 `input_type`：
+
+- **文字**：`{"action": "start_session", "input_type": "text"}` →
+  `{"action": "stream_data", "input_type": "text", "data": "..."}`。
+  聊天 UI 唯一实现 `frontend/react-neko-chat`（构建为
+  `neko-chat-window.iife.js`）经 `static/app/app-buttons.js` /
+  `app-websocket.js` 走的就是这套协议——companion 角色一经注册即复用同一
+  聊天窗口，无需新 UI。
+- **语音**：`{"action": "start_session", "input_type": "audio"}` →
+  `stream_data` 携带麦克风采样数组（`static/app/app-audio-capture.js`）。
+  后端 session manager（`main_logic/core`）把帧转发给 realtime provider
+  client（`main_logic/omni_realtime_client`）。
+
+Provider 一律走 tier（neko-guide：不 hardcode 模型）：文字 =
+`get_model_api_config('conversation')`；语音 =
+`get_model_api_config('realtime')`，其生效 `api_type` 与
+`main_logic/core/lifecycle.py` 的 `core_api_type` 同源——realtime tier 自带
+`api_type` 优先，否则回退 `CORE_API_TYPE`。
+
+### 可调用 facade
+
+`chat.py` 的 `CompanionChatBridge` 与 `realtime_voice.py` 的
+`CompanionRealtimeVoiceBridge` 结构对偶（共用 `runtime.py` 的解析 helper），
+均暴露：
+
+- `character_name` / `websocket_url()` — 角色路由（`/ws/{角色名}`）；
+- `provider_config(config_manager=None)` — 对应 tier 的**脱敏**配置
+  （`model` / `base_url` / `is_custom` / `has_api_key`，绝不外泄
+  `api_key`；语音侧另含 `api_type`）；不传 config manager 时回退全局
+  `utils.config_manager.get_config_manager()`，不可达时安全降级为空配置；
+- `start_session_message()` / `end_session_message()` 及
+  `text_message(text)`（文字）/ `audio_chunk_message(samples)`（语音）—
+  与 `websocket_router` 逐字段一致的待发送协议帧；
+- `session_metadata(config_manager=None)` — 上述信息的聚合快照。
+
+facade **不自行开 socket**：会话生命周期仍由 `websocket_router` + session
+manager 独占管理，保持最小侵入。
+
+### 会话元数据端点
+
+`GET /api/companion/session/{character_name}` 聚合两个 facade：
+
+```json
+{
+  "character_name": "小柚",
+  "websocket_url": "/ws/小柚",
+  "runtime": {"available": true, "session": {"registered": true, "connected": false}},
+  "chat": {"provider": {"tier": "conversation", "model": "...", "has_api_key": true}, "protocol": {...}},
+  "realtime_voice": {"provider": {"tier": "realtime", "api_type": "qwen", ...}, "protocol": {...}}
+}
+```
+
+主服务器运行时（shared_state 已初始化）：未注册角色返回 404（与
+`websocket_router` 连接时的检查一致），`runtime.session` 给出
+live 状态；单测 / 独立工具环境降级为 `runtime.available = false` 的
+纯元数据模式。tier 解析涉及同步读 `core_config.json`，端点内经
+`asyncio.to_thread` offload，遵守单进程零阻塞规范。
 
 ## 开源 AI
 
