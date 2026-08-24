@@ -93,3 +93,92 @@ def to_api_config(provider: OpenSourceProvider) -> dict[str, str]:
     "api_key": provider.api_key,
     "provider": provider.name,
   }
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 M1 — persist a selected Ollama model to provider tiers
+# ---------------------------------------------------------------------------
+
+# Tier name (get_model_api_config vocabulary) → core_config.json field prefix.
+# Only plain chat-completion tiers are wizard-configurable: omni/tts have
+# provider-specific routing (api_type / voice) that a local Ollama can't serve.
+OLLAMA_CONFIG_TIER_PREFIXES: dict[str, str] = {
+  "conversation": "conversation",
+  "summary": "summary",
+  "correction": "correction",
+  "emotion": "emotion",
+  "vision": "vision",
+  "agent": "agent",
+}
+
+# The companion generator resolves its LLM route from the summary tier
+# (companion/generator/pipeline.py), so that is what the one-click wizard
+# targets by default.
+DEFAULT_OLLAMA_CONFIG_TIERS: tuple[str, ...] = ("summary",)
+
+# Conventional placeholder: Ollama ignores the key but the OpenAI SDK
+# requires a non-empty one.
+OLLAMA_API_KEY_PLACEHOLDER = "ollama"
+
+
+def normalize_ollama_openai_base_url(base_url: str) -> str:
+  """Return the OpenAI-compatible ``/v1`` facade URL for an Ollama base URL."""
+  base = (base_url or DEFAULT_OLLAMA_BASE).rstrip("/")
+  if base.endswith(OLLAMA_OPENAI_COMPAT):
+    return base
+  return f"{base}{OLLAMA_OPENAI_COMPAT}"
+
+
+def build_ollama_tier_patch(
+  model: str,
+  base_url: str,
+  tiers: list[str] | tuple[str, ...] = DEFAULT_OLLAMA_CONFIG_TIERS,
+) -> dict[str, Any]:
+  """core_config.json field patch routing ``tiers`` to a local Ollama model.
+
+  Uses the same per-tier custom-API fields the API settings page writes
+  (``{prefix}ModelProvider/Url/Id/ApiKey`` + ``enableCustomApi``), so
+  ``get_model_api_config(<tier>)`` picks the model up without any new
+  config plumbing.
+
+  Raises ``ValueError`` for unknown/unsupported tiers.
+  """
+  if not model or not model.strip():
+    raise ValueError("model must be a non-empty string")
+  unknown = [t for t in tiers if t not in OLLAMA_CONFIG_TIER_PREFIXES]
+  if unknown:
+    raise ValueError(f"unsupported tiers: {', '.join(unknown)}")
+  if not tiers:
+    raise ValueError("at least one tier is required")
+  openai_url = normalize_ollama_openai_base_url(base_url)
+  patch: dict[str, Any] = {"enableCustomApi": True}
+  for tier in tiers:
+    prefix = OLLAMA_CONFIG_TIER_PREFIXES[tier]
+    patch[f"{prefix}ModelProvider"] = "custom"
+    patch[f"{prefix}ModelUrl"] = openai_url
+    patch[f"{prefix}ModelId"] = model.strip()
+    patch[f"{prefix}ModelApiKey"] = OLLAMA_API_KEY_PLACEHOLDER
+  return patch
+
+
+def apply_ollama_tier_config(
+  model: str,
+  base_url: str,
+  tiers: list[str] | tuple[str, ...],
+  config_manager,
+) -> dict[str, Any]:
+  """Merge the Ollama tier patch into core_config.json and persist it.
+
+  Sync (file IO through config_manager): async callers must offload with
+  ``asyncio.to_thread`` per the single-process zero-blocking rule.
+  Load-then-merge mirrors ``POST /core_api`` so unrelated fields survive.
+  """
+  try:
+    existing = config_manager.load_json_config("core_config.json", {})
+  except Exception:
+    existing = {}
+  core_cfg = dict(existing) if isinstance(existing, dict) else {}
+  patch = build_ollama_tier_patch(model, base_url, tiers)
+  core_cfg.update(patch)
+  config_manager.save_json_config("core_config.json", core_cfg)
+  return patch
