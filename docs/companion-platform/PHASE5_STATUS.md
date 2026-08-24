@@ -37,9 +37,17 @@
 | `cursor/companion-generator-llm-3e93` | Pipeline 真实 LLM + Ollama 降级 | #4 |
 | `cursor/companion-phase4-integration-3e93` | Phase 4 HA / 对话 / 工坊 i18n | #5 |
 | `cursor/companion-docs-phase5-plan-3e93` | Phase 4 完成文档 + Phase 5 计划 | #6 |
-| `cursor/companion-generator-ha-3e93`、`cursor/companion-memory-bootstrap-3e93`、`cursor/companion-realtime-dialogue-3e93`、`cursor/companion-wizard-e2e-3e93` | 经集成分支合入 | — |
+| `cursor/companion-ollama-wizard-3e93` | Phase 5 M1 Ollama 向导 | #9 |
+| `cursor/companion-avatar-persist-3e93` | Phase 5 M2 Avatar 持久化 | #8 |
 
-## M1 交接 — Ollama 一键配置向导（P0）
+## M1 / M2 完成状态（Phase 5）
+
+- [x] **M1** Ollama 一键配置：`static/companion/ollama/`、`POST /ai/open-source/config`（[#9](https://github.com/KatouRyuuji/N.E.K.O/pull/9)）。
+- [x] **M2** Avatar Registry SQLite + `DELETE /avatar/{profile_id}`（[#8](https://github.com/KatouRyuuji/N.E.K.O/pull/8)）。
+- [ ] **M3** 指标：`GET /metrics`、阶段耗时（进行中，见 `cursor/companion-metrics-m3-3e93`）。
+- [ ] **M5** 工坊市场 UX（待 wave2 子代理或后续 PR）。
+
+## M1 交接 — Ollama 一键配置向导（P0，已完成）
 
 认领 subagent 需要知道的现状与坑：
 

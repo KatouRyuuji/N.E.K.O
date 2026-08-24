@@ -29,7 +29,9 @@ Route groups, all mounted through ``main_routers/companion_router``:
   package-path deletion (Phase 5 M2);
 - productivity: ``/productivity/*`` (pomodoro / todos / memos / media);
 - open-source probe: ``/ai/open-source``; one-click Ollama tier config
-  (Phase 5 M1): ``/ai/open-source/config``; TTS preview: ``/tts/preview``.
+  (Phase 5 M1): ``/ai/open-source/config``; TTS preview: ``/tts/preview``;
+- metrics (Phase 5 M3): ``GET /metrics`` — generation/workshop/productivity
+  aggregates; per-task ``stage_timings_ms`` on ``GET /generate/{task_id}``.
 """
 
 from __future__ import annotations
@@ -250,8 +252,28 @@ async def companion_platform_info():
       "live2d",
       "avatar_swap",
       "companion_generator",
+      "metrics",
     ],
   }
+
+
+@router.get("/metrics")
+async def companion_metrics():
+  from companion.metrics.summary import collect_companion_metrics
+
+  prod = get_productivity()
+  registry = _get_avatar_registry()
+
+  def _collect() -> dict:
+    return collect_companion_metrics(
+      task_store=get_task_store(),
+      workshop_root=_workshop_export_root(),
+      todo_count=len(prod.todo.list_items()),
+      memo_count=len(prod.memo.list_memos()),
+      avatar_profile_count=len(registry.list_profiles()),
+    )
+
+  return await asyncio.to_thread(_collect)
 
 
 @router.get("/session/{character_name}")
@@ -394,6 +416,9 @@ async def get_generation_task(task_id: str):
   if task is None:
     raise HTTPException(status_code=404, detail="task not found")
   payload = task.to_public_dict()
+  timings = (task.stage_results or {}).get("stage_timings_ms")
+  if timings:
+    payload["stage_timings_ms"] = timings
   if task.artifact is not None:
     payload["artifact"] = task.artifact.model_dump(mode="json")
   return payload

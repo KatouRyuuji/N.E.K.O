@@ -34,6 +34,7 @@ from __future__ import annotations
 import json
 import shutil
 import threading
+import time
 import uuid
 from pathlib import Path
 from typing import Any
@@ -389,6 +390,7 @@ def run_pipeline_sync(task: GenerationTask, output_root: Path | None = None) -> 
         continue
       task.current_stage = stage
       store.update(task)
+      stage_t0 = time.perf_counter()
       logger.info("Companion generator stage=%s task=%s", stage.value, task.id)
 
       if stage == GenerationStage.INGEST:
@@ -487,6 +489,8 @@ def run_pipeline_sync(task: GenerationTask, output_root: Path | None = None) -> 
           analysis_summary=dict(analysis, llm=llm_meta),
         )
         task.artifact = artifact
+        timings = task.stage_results.setdefault("stage_timings_ms", {})
+        timings[stage.value] = int((time.perf_counter() - stage_t0) * 1000)
         task.stages_completed.append(stage)
         task.status = TaskStatus.COMPLETED
         task.current_stage = None
@@ -495,6 +499,8 @@ def run_pipeline_sync(task: GenerationTask, output_root: Path | None = None) -> 
 
       # Persist the checkpoint the moment the stage completes: a later crash
       # must find stages_completed/stage_results consistent for the retry.
+      timings = task.stage_results.setdefault("stage_timings_ms", {})
+      timings[stage.value] = int((time.perf_counter() - stage_t0) * 1000)
       task.stages_completed.append(stage)
       store.update(task)
 
