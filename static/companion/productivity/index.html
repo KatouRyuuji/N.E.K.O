@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>N.E.K.O. 伴侣生产力面板</title>
+  <style>
+    :root {
+      --bg: #0f1220;
+      --bg-soft: #161a2e;
+      --card: rgba(255, 255, 255, 0.05);
+      --card-border: rgba(255, 255, 255, 0.09);
+      --text: #e8eaf6;
+      --text-dim: #9aa0c3;
+      --accent: #7c6cff;
+      --accent-soft: rgba(124, 108, 255, 0.18);
+      --green: #4ade80;
+      --amber: #fbbf24;
+      --red: #f87171;
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      background:
+        radial-gradient(1200px 600px at 80% -10%, rgba(124, 108, 255, 0.25), transparent 60%),
+        radial-gradient(900px 500px at -10% 110%, rgba(74, 222, 128, 0.12), transparent 60%),
+        var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      padding: 24px;
+    }
+    header {
+      max-width: 1080px;
+      margin: 0 auto 20px;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    header h1 { font-size: 1.45rem; font-weight: 700; letter-spacing: 0.02em; }
+    header h1 span { color: var(--accent); }
+    #conn-state { font-size: 0.85rem; color: var(--text-dim); }
+    #conn-state.ok::before { content: "●"; color: var(--green); margin-right: 6px; }
+    #conn-state.err::before { content: "●"; color: var(--red); margin-right: 6px; }
+    .grid {
+      max-width: 1080px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 18px;
+      align-items: start;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 20px;
+      backdrop-filter: blur(12px);
+    }
+    .card h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text);
+    }
+    .card h2 .badge {
+      font-size: 0.7rem;
+      font-weight: 500;
+      color: var(--text-dim);
+      background: var(--accent-soft);
+      border-radius: 999px;
+      padding: 2px 10px;
+    }
+    /* Pomodoro */
+    .pomodoro-face { text-align: center; padding: 10px 0 16px; }
+    #pomo-time {
+      font-size: 3rem;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    #pomo-phase { color: var(--text-dim); font-size: 0.9rem; margin-top: 4px; }
+    #pomo-phase[data-phase="work"] { color: var(--accent); }
+    #pomo-phase[data-phase="break"] { color: var(--green); }
+    #pomo-cycles { color: var(--text-dim); font-size: 0.8rem; margin-top: 6px; }
+    .btn-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+    button {
+      font: inherit;
+      color: var(--text);
+      background: var(--accent-soft);
+      border: 1px solid rgba(124, 108, 255, 0.35);
+      border-radius: 10px;
+      padding: 8px 16px;
+      cursor: pointer;
+      transition: background 0.15s ease, transform 0.1s ease;
+    }
+    button:hover { background: rgba(124, 108, 255, 0.32); }
+    button:active { transform: scale(0.97); }
+    button.ghost { background: transparent; border-color: var(--card-border); color: var(--text-dim); }
+    button.ghost:hover { color: var(--text); }
+    /* forms */
+    .add-row { display: flex; gap: 8px; margin-bottom: 12px; }
+    .add-row input, .add-row textarea {
+      flex: 1;
+      font: inherit;
+      color: var(--text);
+      background: var(--bg-soft);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 9px 12px;
+      outline: none;
+      resize: vertical;
+    }
+    .add-row input:focus, .add-row textarea:focus { border-color: var(--accent); }
+    /* lists */
+    ul { list-style: none; }
+    .item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 9px 10px;
+      border-radius: 10px;
+    }
+    .item:hover { background: rgba(255, 255, 255, 0.04); }
+    .item input[type="checkbox"] { margin-top: 4px; accent-color: var(--accent); width: 16px; height: 16px; }
+    .item .body { flex: 1; min-width: 0; }
+    .item .title { word-break: break-word; }
+    .item.done .title { text-decoration: line-through; color: var(--text-dim); }
+    .item .meta { font-size: 0.72rem; color: var(--text-dim); margin-top: 2px; }
+    .item .del {
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      padding: 2px 6px;
+      font-size: 1rem;
+      line-height: 1;
+      border-radius: 6px;
+    }
+    .item .del:hover { color: var(--red); background: rgba(248, 113, 113, 0.12); }
+    .empty { color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 14px 0; }
+    /* music */
+    .kv { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; font-size: 0.87rem; }
+    .kv .k { color: var(--text-dim); }
+    .kv .v { text-align: right; word-break: break-word; }
+    .pill { display: inline-block; border-radius: 999px; padding: 1px 10px; font-size: 0.75rem; }
+    .pill.on { background: rgba(74, 222, 128, 0.15); color: var(--green); }
+    .pill.off { background: rgba(248, 113, 113, 0.15); color: var(--red); }
+    .pill.na { background: rgba(251, 191, 36, 0.15); color: var(--amber); }
+    #music-domains { font-size: 0.75rem; color: var(--text-dim); line-height: 1.7; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1><span>N.E.K.O.</span> 伴侣生产力面板</h1>
+    <div id="conn-state">连接中…</div>
+  </header>
+
+  <main class="grid">
+    <section class="card" id="card-pomodoro">
+      <h2>番茄钟 <span class="badge" id="pomo-config"></span></h2>
+      <div class="pomodoro-face">
+        <div id="pomo-time">--:--</div>
+        <div id="pomo-phase" data-phase="idle">待机</div>
+        <div id="pomo-cycles"></div>
+      </div>
+      <div class="btn-row">
+        <button id="pomo-work">开始专注</button>
+        <button id="pomo-break">开始休息</button>
+        <button id="pomo-stop" class="ghost">停止</button>
+      </div>
+    </section>
+
+    <section class="card" id="card-todos">
+      <h2>待办事项 <span class="badge" id="todo-count"></span></h2>
+      <form class="add-row" id="todo-form">
+        <input id="todo-input" placeholder="添加待办…" maxlength="500" required />
+        <button type="submit">添加</button>
+      </form>
+      <ul id="todo-list"></ul>
+    </section>
+
+    <section class="card" id="card-memos">
+      <h2>备忘录 <span class="badge" id="memo-count"></span></h2>
+      <form class="add-row" id="memo-form">
+        <textarea id="memo-input" placeholder="记点什么…" rows="2" maxlength="5000" required></textarea>
+        <button type="submit">保存</button>
+      </form>
+      <ul id="memo-list"></ul>
+    </section>
+
+    <section class="card" id="card-music">
+      <h2>音乐服务状态 <span class="badge">只读</span></h2>
+      <div id="music-body"><div class="empty">加载中…</div></div>
+    </section>
+  </main>
+
+  <script src="/static/companion/productivity/app.js"></script>
+</body>
+</html>

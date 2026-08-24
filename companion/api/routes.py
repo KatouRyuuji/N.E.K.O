@@ -22,6 +22,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from companion.generator.pipeline import start_generation
 from companion.generator.tasks import TaskStatus, get_task_store
@@ -30,8 +31,47 @@ from companion.productivity.service import ProductivityService
 from companion.avatar.registry import AvatarRegistry
 
 router = APIRouter(prefix="/api/companion", tags=["companion"])
-_productivity = ProductivityService()
+_productivity: ProductivityService | None = None
 _avatar_registry = AvatarRegistry()
+
+
+def get_productivity() -> ProductivityService:
+  """Lazily build the shared productivity service.
+
+  Deferred so importing this module never touches the user data directory;
+  the SQLite database is only opened when a productivity endpoint is hit.
+  """
+  global _productivity
+  if _productivity is None:
+    _productivity = ProductivityService()
+  return _productivity
+
+
+class TodoCreate(BaseModel):
+  title: str = Field(min_length=1, max_length=500)
+
+
+class TodoPatch(BaseModel):
+  done: bool | None = None
+  title: str | None = Field(default=None, min_length=1, max_length=500)
+
+
+class MemoCreate(BaseModel):
+  content: str = Field(min_length=1, max_length=5000)
+
+
+def _todo_dict(item) -> dict:
+  return {
+    "id": item.id,
+    "title": item.title,
+    "done": item.done,
+    "created_at": item.created_at,
+    "updated_at": item.updated_at,
+  }
+
+
+def _memo_dict(memo) -> dict:
+  return {"id": memo.id, "content": memo.content, "created_at": memo.created_at}
 
 
 @router.get("/health")
@@ -103,48 +143,92 @@ async def download_manifest(task_id: str):
 
 @router.get("/productivity/status")
 async def productivity_status():
+  prod = get_productivity()
+  media = prod.media.snapshot()
   return {
-    "pomodoro": _productivity.pomodoro.snapshot(),
-    "todos": [
-      {"id": t.id, "title": t.title, "done": t.done}
-      for t in _productivity.todo.list_items()
-    ],
-    "memos": [
-      {"id": m.id, "content": m.content, "created_at": m.created_at}
-      for m in _productivity.memo.list_memos()
-    ],
-    "media": {
-      "playing": _productivity.media.snapshot().playing,
-      "title": _productivity.media.snapshot().title,
-    },
+    "pomodoro": prod.pomodoro.snapshot(),
+    "todos": [_todo_dict(t) for t in prod.todo.list_items()],
+    "memos": [_memo_dict(m) for m in prod.memo.list_memos()],
+    "media": {"playing": media.playing, "title": media.title},
   }
+
+
+@router.get("/productivity/music")
+async def productivity_music_state():
+  """Read-only snapshot of the music router runtime state."""
+  return get_productivity().media.music_state()
 
 
 @router.post("/productivity/pomodoro/start")
 async def pomodoro_start(phase: str = "work"):
+  prod = get_productivity()
   if phase == "break":
-    _productivity.pomodoro.start_break()
+    prod.pomodoro.start_break()
   else:
-    _productivity.pomodoro.start_work()
-  return _productivity.on_pomodoro_event(f"pomodoro.{phase}.start")
+    prod.pomodoro.start_work()
+  event = prod.on_pomodoro_event(f"pomodoro.{phase}.start")
+  event["pomodoro"] = prod.pomodoro.snapshot()
+  return event
 
 
 @router.post("/productivity/pomodoro/stop")
 async def pomodoro_stop():
-  _productivity.pomodoro.stop()
-  return _productivity.on_pomodoro_event("pomodoro.stop")
+  prod = get_productivity()
+  prod.pomodoro.stop()
+  event = prod.on_pomodoro_event("pomodoro.stop")
+  event["pomodoro"] = prod.pomodoro.snapshot()
+  return event
 
 
-@router.post("/productivity/todos")
-async def create_todo(title: str):
-  item = _productivity.todo.create(title)
-  return {"id": item.id, "title": item.title, "done": item.done}
+@router.post("/productivity/todos", status_code=201)
+async def create_todo(body: TodoCreate):
+  return _todo_dict(get_productivity().todo.create(body.title.strip()))
 
 
-@router.post("/productivity/memos")
-async def create_memo(content: str):
-  memo = _productivity.memo.create(content)
-  return {"id": memo.id, "content": memo.content, "created_at": memo.created_at}
+@router.get("/productivity/todos")
+async def list_todos():
+  return {"todos": [_todo_dict(t) for t in get_productivity().todo.list_items()]}
+
+
+@router.patch("/productivity/todos/{todo_id}")
+async def patch_todo(todo_id: str, body: TodoPatch):
+  prod = get_productivity()
+  item = None
+  if body.title is not None:
+    item = prod.todo.rename(todo_id, body.title.strip())
+    if item is None:
+      raise HTTPException(status_code=404, detail="todo not found")
+  if body.done is not None:
+    item = prod.todo.toggle(todo_id, body.done)
+  if item is None:
+    item = prod.todo.get(todo_id)
+  if item is None:
+    raise HTTPException(status_code=404, detail="todo not found")
+  return _todo_dict(item)
+
+
+@router.delete("/productivity/todos/{todo_id}")
+async def delete_todo(todo_id: str):
+  if not get_productivity().todo.delete(todo_id):
+    raise HTTPException(status_code=404, detail="todo not found")
+  return {"deleted": todo_id}
+
+
+@router.post("/productivity/memos", status_code=201)
+async def create_memo(body: MemoCreate):
+  return _memo_dict(get_productivity().memo.create(body.content.strip()))
+
+
+@router.get("/productivity/memos")
+async def list_memos():
+  return {"memos": [_memo_dict(m) for m in get_productivity().memo.list_memos()]}
+
+
+@router.delete("/productivity/memos/{memo_id}")
+async def delete_memo(memo_id: str):
+  if not get_productivity().memo.delete(memo_id):
+    raise HTTPException(status_code=404, detail="memo not found")
+  return {"deleted": memo_id}
 
 
 @router.get("/avatar/list")
