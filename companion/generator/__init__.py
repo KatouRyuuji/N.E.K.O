@@ -15,7 +15,12 @@
 
 """Companion generator package."""
 
-from companion.generator.pipeline import run_pipeline_sync, retry_generation, start_generation
+from companion.generator.pipeline import (
+  run_pipeline_sync,
+  retry_generation,
+  start_generation,
+  start_generation_background,
+)
 from companion.generator.tasks import GenerationTask, TaskStatus, get_task_store
 
 __all__ = [
@@ -23,5 +28,7 @@ __all__ = [
   "TaskStatus",
   "get_task_store",
   "run_pipeline_sync",
+  "retry_generation",
   "start_generation",
+  "start_generation_background",
 ]
