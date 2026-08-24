@@ -13,35 +13,36 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Memo / notes service."""
+"""Memo / notes service backed by SQLite persistence (Phase 2)."""
 
 from __future__ import annotations
 
-import uuid
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from typing import Any
+
+from companion.productivity.storage import ProductivityStorage
 
 
 @dataclass
 class Memo:
   id: str
   content: str
-  created_at: str = field(
-    default_factory=lambda: datetime.now(timezone.utc).isoformat()
-  )
+  created_at: str = ""
+
+
+def _to_memo(row: dict[str, Any]) -> Memo:
+  return Memo(id=row["id"], content=row["content"], created_at=row["created_at"])
 
 
 class MemoService:
-  def __init__(self) -> None:
-    self._memos: dict[str, Memo] = {}
+  def __init__(self, storage: ProductivityStorage | None = None) -> None:
+    self._storage = storage if storage is not None else ProductivityStorage(":memory:")
 
   def create(self, content: str) -> Memo:
-    memo = Memo(id=str(uuid.uuid4()), content=content)
-    self._memos[memo.id] = memo
-    return memo
+    return _to_memo(self._storage.create_memo(content))
 
   def list_memos(self) -> list[Memo]:
-    return sorted(self._memos.values(), key=lambda m: m.created_at, reverse=True)
+    return [_to_memo(row) for row in self._storage.list_memos()]
 
   def delete(self, memo_id: str) -> bool:
-    return self._memos.pop(memo_id, None) is not None
+    return self._storage.delete_memo(memo_id)

@@ -17,18 +17,25 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from companion.productivity.media_monitor import MediaMonitor
 from companion.productivity.memo import MemoService
 from companion.productivity.pomodoro import PomodoroService
+from companion.productivity.storage import ProductivityStorage
 from companion.productivity.todo import TodoService
 
 
 class ProductivityService:
-  def __init__(self) -> None:
+  def __init__(self, db_path: str | Path | None = None) -> None:
+    self.storage = ProductivityStorage(db_path)
     self.pomodoro = PomodoroService()
-    self.todo = TodoService()
-    self.memo = MemoService()
+    self.todo = TodoService(self.storage)
+    self.memo = MemoService(self.storage)
     self.media = MediaMonitor()
+
+  def close(self) -> None:
+    self.storage.close()
 
   def on_pomodoro_event(self, event: str) -> dict:
     return {"event": event, "hook": "companion.persona.react"}

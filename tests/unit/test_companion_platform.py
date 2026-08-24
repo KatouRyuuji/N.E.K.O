@@ -82,7 +82,7 @@ def test_productivity_and_avatar_modules():
   from companion.avatar.registry import AvatarRegistry
   from companion.models.profile import AvatarKind
 
-  prod = ProductivityService()
+  prod = ProductivityService(":memory:")
   prod.pomodoro.start_work()
   assert prod.pomodoro.snapshot()["phase"] == "work"
   todo = prod.todo.create("写文档")
