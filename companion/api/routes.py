@@ -21,12 +21,13 @@ import asyncio
 import json
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from companion.generator.pipeline import start_generation
 from companion.generator.tasks import TaskStatus, get_task_store
+from companion.generator.uploads import UploadError, save_generation_uploads
 from companion.models.generation import GenerationInput
 from companion.productivity.service import ProductivityService
 from companion.avatar.loader import AvatarPackageError, load_avatar_from_package
@@ -148,6 +149,60 @@ async def create_generation_task(body: GenerationInput):
   )
 
 
+@router.post("/generate/upload")
+async def create_generation_task_multipart(
+  companion_name: str = Form(min_length=1, max_length=200),
+  locale: str = Form("zh-CN"),
+  corpus_text: str = Form(""),
+  system_prompt: str = Form(""),
+  live2d_model_id: str = Form(""),
+  live2d_package_path: str = Form(""),
+  corpus_files: list[UploadFile] = File(default_factory=list),
+  reference_images: list[UploadFile] = File(default_factory=list),
+  reference_audio: list[UploadFile] = File(default_factory=list),
+  reference_video: list[UploadFile] = File(default_factory=list),
+):
+  """Multimodal wizard submission: persist uploads, then run the pipeline.
+
+  Accepts multipart/form-data so the wizard can attach corpus files and
+  reference images/audio/video alongside the plain generation fields.
+  Decodable text corpus files are merged into ``corpus_text`` before the
+  pipeline runs; every stored path is forwarded on ``GenerationInput`` so
+  later stages (voice cloning, appearance) can pick them up.
+  """
+  def _pairs(files: list[UploadFile]):
+    return [(f.filename, f.file) for f in files if f.filename]
+
+  try:
+    saved = await asyncio.to_thread(
+      save_generation_uploads,
+      _pairs(corpus_files),
+      _pairs(reference_images),
+      _pairs(reference_audio),
+      _pairs(reference_video),
+      inline_corpus_text=corpus_text,
+    )
+  except UploadError as exc:
+    raise HTTPException(status_code=413, detail=str(exc))
+
+  gen_input = GenerationInput(
+    companion_name=companion_name.strip(),
+    locale=locale.strip() or "zh-CN",
+    corpus_text=saved.merged_corpus_text or None,
+    corpus_files=saved.corpus_files,
+    system_prompt=system_prompt.strip() or None,
+    live2d_model_id=live2d_model_id.strip() or None,
+    live2d_package_path=live2d_package_path.strip() or None,
+    reference_images=saved.reference_images,
+    reference_audio=saved.reference_audio,
+    reference_video=saved.reference_video,
+  )
+  task = await asyncio.to_thread(start_generation, gen_input)
+  payload = task.to_public_dict()
+  payload["uploads"] = {"session_dir": saved.session_dir, **saved.counts()}
+  return JSONResponse(status_code=201, content=payload)
+
+
 @router.get("/generate")
 async def list_generation_tasks(limit: int = 50):
   store = get_task_store()
@@ -179,6 +234,35 @@ async def download_manifest(task_id: str):
   if not manifest_path.is_file():
     raise HTTPException(status_code=404, detail="manifest not found")
   return json.loads(manifest_path.read_text(encoding="utf-8"))
+
+
+@router.post("/generate/{task_id}/import")
+async def import_generated_companion(task_id: str, activate: bool = True):
+  """One-click import: register a completed generation as a live avatar.
+
+  Loads the task's generated `.neko-companion` package into the avatar
+  registry (same code path as ``/avatar/load-package``), so the wizard can
+  hand the result straight to the hot-swap panel / Live2D bridge.
+  """
+  store = get_task_store()
+  task = store.get(task_id)
+  if task is None:
+    raise HTTPException(status_code=404, detail="task not found")
+  if task.status != TaskStatus.COMPLETED or task.artifact is None:
+    raise HTTPException(status_code=409, detail="task not completed")
+  package_dir = Path(task.artifact.package_path)
+  if not package_dir.is_dir():
+    raise HTTPException(status_code=404, detail="generated package not found")
+  try:
+    profile = load_avatar_from_package(
+      package_dir, _avatar_registry, activate=activate
+    )
+  except AvatarPackageError as exc:
+    raise HTTPException(status_code=422, detail=str(exc))
+  return JSONResponse(
+    status_code=201,
+    content={"imported": True, "avatar": _avatar_public_dict(profile)},
+  )
 
 
 @router.get("/productivity/status")
