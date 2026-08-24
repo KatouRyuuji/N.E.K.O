@@ -295,7 +295,9 @@ def test_pipeline_ollama_fallback_route(tmp_path, monkeypatch):
 # ── Phase 2: open_source (Ollama detection) ─────────────────────────────────
 
 
-@pytest.mark.parametrize("base_url,model,expected", [
+# NB: parameter deliberately named endpoint_url — "base_url" collides with the
+# pytest-base-url plugin's session-scoped fixture.
+@pytest.mark.parametrize("endpoint_url,model,expected", [
   ("http://127.0.0.1:11434", "", True),               # default port
   ("http://192.168.1.5:11434/v1", "", True),          # default port on LAN
   ("https://my.proxy.example/ollama/v1", "", True),   # reverse-proxy path
@@ -304,8 +306,8 @@ def test_pipeline_ollama_fallback_route(tmp_path, monkeypatch):
   ("http://localhost:8000/v1", "qwen3", False),       # local but no hint
   ("", "", False),
 ])
-def test_is_ollama_endpoint(base_url, model, expected):
-  assert open_source_mod.is_ollama_endpoint(base_url, model) is expected
+def test_is_ollama_endpoint(endpoint_url, model, expected):
+  assert open_source_mod.is_ollama_endpoint(endpoint_url, model) is expected
 
 
 class _FakeTagsResponse:
