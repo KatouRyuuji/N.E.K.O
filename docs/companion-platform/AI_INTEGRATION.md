@@ -129,7 +129,12 @@ live 状态；单测 / 独立工具环境降级为 `runtime.available = false` �
 纯元数据模式。tier 解析涉及同步读 `core_config.json`，端点内经
 `asyncio.to_thread` offload，遵守单进程零阻塞规范。
 
-## 开源 AI
+## 开源 AI（Phase 2 已落地，向导 UI 见 Phase 5）
 
-Phase 2 将在 `open_source.py` 增加 Ollama 路由；当前通过
-`config/api_providers.json` 配置本地 endpoint。
+- `companion/generator/open_source.py` — Ollama 探测（`GET /api/tags`）与
+  `get_model_api_config` 形状的路由解析，供生成 pipeline 在 `summary` tier
+  未配置时降级使用（详见 COMPANION_GENERATOR.md「LLM 集成」）。
+- `companion/ai/open_source.py` — 运行时探测/解析，经
+  `GET /api/companion/ai/open-source` 暴露可用性与当前生效配置。
+- 一键**配置向导 UI** 尚未实现，为 Phase 5 M1（P0），见
+  [PHASE5_PLAN.md](./PHASE5_PLAN.md)。

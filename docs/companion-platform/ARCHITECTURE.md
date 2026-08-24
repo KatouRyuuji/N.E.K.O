@@ -1,15 +1,24 @@
 # Companion Platform Architecture
 
-## 模块划分
+## 模块划分（Phase 4 后）
 
 ```
 companion/
 ├── models/          # CompanionProfile, GenerationInput, Manifest
-├── generator/       # 长任务 Pipeline、任务状态机
-├── ai/              # 记忆/人设/对话/TTS Facade（并行 Agent E）
-├── avatar/          # 形象注册、Live2D 桥接、特效（并行 Agent D）
-├── productivity/    # 番茄钟/Todo/备忘/媒体监测（并行 Agent C）
-└── api/             # FastAPI 路由聚合
+├── generator/       # 长任务 Pipeline、SQLite 任务 store（HA）、上传持久化、
+│                    # 开源模型探测（open_source.py）、声线映射
+├── ai/              # 记忆/人设/对话/TTS Facade
+│   ├── chat.py            # 文字对话 facade（conversation tier + WS 协议帧）
+│   ├── realtime_voice.py  # 语音对话 facade（realtime tier + api_type）
+│   ├── runtime.py         # 两个对话 facade 共用的运行时/脱敏解析
+│   └── bootstrap.py       # 生成产物 → persona 记忆种子
+├── avatar/          # 形象注册、Live2D 桥接、特效
+├── productivity/    # 番茄钟/Todo/备忘/媒体监测（SQLite 持久化）
+├── workshop/        # 创意工坊导出/目录扫描（export.py，Phase 4）
+└── api/             # FastAPI 路由聚合（/api/companion/*）
+
+static/companion/    # 向导 wizard/、工坊 workshop/、生产力面板 productivity/、
+                     # avatar 面板 avatar/、共享 i18n.js（8 locale）
 ```
 
 ## 数据流
@@ -17,8 +26,10 @@ companion/
 ```mermaid
 flowchart LR
     Input[多模态输入] --> Pipeline[Generator Pipeline]
+    Pipeline --> Store[(SQLite 任务 store\n阶段 checkpoint)]
     Pipeline --> Artifact[.neko-companion]
     Artifact --> Bootstrap[AI Bootstrap]
+    Artifact --> Workshop[workshop catalog/publish]
     Bootstrap --> Memory[memory service]
     Bootstrap --> Persona[character card]
     Artifact --> Avatar[avatar registry]
@@ -31,11 +42,29 @@ flowchart LR
 
 | 现有模块 | Companion 集成方式 |
 |----------|-------------------|
-| `memory/` | `companion/ai/memory_bridge.py` 代理 memory server (48912) |
-| `main_routers/characters_router` | Persona 导入/导出 |
-| `main_routers/live2d_router` | Avatar loader 复用模型目录 |
+| `memory/` | `companion/ai/memory_bridge.py` 代理 memory server (48912)；`bootstrap.py` 复用在跑 `PersonaManager` 写种子 |
+| `main_routers/characters_router` | `persona.py` 角色卡双向映射 / 注册，导入后 best-effort 通知 memory `/reload` |
+| `main_routers/websocket_router` | `chat.py` / `realtime_voice.py` 输出与 `/ws/{name}` 逐字段一致的协议帧（facade 不自行开 socket） |
+| `main_routers/live2d_router` | Avatar loader 复用模型目录；包内资源经 `/api/companion/avatar/{id}/resource/{path}` 直出 |
 | `utils/tts/` | `tts_bridge.py` 统一声线配置 |
-| `app/main_server/web_app.py` | 挂载 `companion_router` |
+| `app/main_server/web_app.py` | 挂载 `companion_router`（经 `main_routers/companion_router`） |
+| `static/locales/*.json` | 向导/工坊/面板 UI 文案，8 locale 同步（`static/companion/i18n.js` 加载） |
+
+## 对话会话 API（Phase 4）
+
+- `GET /api/companion/session/{character_name}` — 聚合文字 + 语音两个 facade 的
+  会话元数据：websocket 路由、脱敏 provider tier 配置、协议帧、runtime live
+  状态（主服务器未启动时降级为 `runtime.available = false`）。
+- `POST /api/companion/dialogue/session` — 由 companion profile 生成
+  文字/语音双通道的 connect info（角色路由 + locale + 记忆角色名）。
+
+## 任务 HA（Phase 4）
+
+生成任务持久化在 SQLite（`generation_tasks` 表，路径经
+`NEKO_COMPANION_TASKS_DB_PATH` 覆盖），每阶段输出写 `stage_results`
+checkpoint；`POST /generate/{task_id}/retry` 从失败阶段恢复（已完成的 LLM
+阶段不重跑），全部生成端点支持 `?background=true` 异步模式。详见
+[COMPANION_GENERATOR.md](./COMPANION_GENERATOR.md)。
 
 ## API 前缀
 
