@@ -80,6 +80,36 @@ def _isolate_companion_task_store(request, tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _isolate_companion_avatar_registry(request, tmp_path, monkeypatch):
+    """Point the companion avatar-registry SQLite store at a per-test path.
+
+    Phase 5 M2 made the avatar registry persistent (SQLite on the user data
+    root by default) — same rationale as `_isolate_companion_task_store`:
+    without this fixture, companion tests hitting avatar routes would write
+    into the developer's real Documents tree and leak profiles across tests.
+    The packages root is pinned to `tmp_path` so safe package deletion
+    (`DELETE /avatar/{id}?delete_package=true`) can operate on test packages.
+    """
+    module_name = getattr(request.module, "__name__", "").split(".")[-1]
+    if not module_name.startswith("test_companion"):
+        yield
+        return
+
+    from companion.avatar import store as avatar_store_mod
+
+    monkeypatch.setenv(
+        avatar_store_mod.ENV_AVATAR_DB_PATH,
+        str(tmp_path / "companion_avatar_registry.db"),
+    )
+    monkeypatch.setenv(avatar_store_mod.ENV_PACKAGES_ROOT, str(tmp_path))
+    avatar_store_mod.reset_avatar_registry()
+    try:
+        yield
+    finally:
+        avatar_store_mod.reset_avatar_registry()
+
+
+@pytest.fixture(autouse=True)
 def _reset_game_sessions(request):
     if not _needs_game_route_reset(request):
         yield

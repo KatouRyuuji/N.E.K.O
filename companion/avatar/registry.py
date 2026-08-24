@@ -31,8 +31,30 @@ class AvatarRegistry:
     if self._active_id is None:
       self._active_id = profile.id
 
+  def get(self, profile_id: str) -> AvatarProfile | None:
+    return self._profiles.get(profile_id)
+
   def list_profiles(self) -> list[AvatarProfile]:
     return list(self._profiles.values())
+
+  def unregister(self, profile_id: str) -> AvatarProfile | None:
+    """Remove a profile; the active selection falls back to the first
+    remaining profile (or ``None``) when the active one is removed."""
+    profile = self._profiles.pop(profile_id, None)
+    if profile is None:
+      return None
+    if self._active_id == profile_id:
+      self._active_id = next(iter(self._profiles), None)
+    return profile
+
+  def save_profile(self, profile: AvatarProfile) -> None:
+    """Persistence hook after in-place mutations (e.g. effects decorations).
+
+    The in-memory registry only (re)stores the object;
+    :class:`~companion.avatar.store.PersistentAvatarRegistry` overrides
+    this to write the profile through to SQLite.
+    """
+    self._profiles[profile.id] = profile
 
   def set_active(self, profile_id: str) -> AvatarProfile | None:
     if profile_id not in self._profiles:
