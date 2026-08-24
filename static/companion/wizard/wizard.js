@@ -116,6 +116,7 @@
     $('submit-btn').textContent = tr('wizard.startGenerate', '开始生成');
     $('retry-btn').textContent = tr('wizard.retry', '重试生成');
     $('publish-btn').textContent = tr('workshop.publish', '发布到工坊');
+    $('ollama-link').textContent = tr('ollama.wizardLink', '本地模型（Ollama）');
   }
 
   // ------------------------------------------------------------ file inputs

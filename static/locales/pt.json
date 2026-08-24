@@ -4984,6 +4984,32 @@
             "title": "Oficina de companheiros",
             "empty": "Ainda não há companheiros publicados.",
             "publish": "Publicar na oficina"
+        },
+        "ollama": {
+            "title": "Configuração do modelo local Ollama",
+            "subtitle": "Detecte o Ollama local, escolha um modelo e roteie com um clique",
+            "wizardLink": "Modelo local (Ollama)",
+            "backToWizard": "Voltar ao assistente",
+            "probeTitle": "Status da detecção",
+            "statusChecking": "Verificando…",
+            "statusAvailable": "Ollama local detectado",
+            "statusUnavailable": "Ollama local não detectado",
+            "recheck": "Verificar novamente",
+            "baseUrlLabel": "URL do servidor",
+            "modelCountLabel": "Modelos instalados",
+            "configTitle": "Escolher modelo",
+            "noModels": "O Ollama está em execução, mas nenhum modelo foi instalado ainda. Baixe um primeiro:",
+            "modelLabel": "Modelo",
+            "tiersLabel": "Aplicar a",
+            "tierSummary": "Geração de companheiros / resumos (summary)",
+            "tierConversation": "Chat de texto (conversation)",
+            "apply": "Salvar configuração",
+            "applying": "Salvando…",
+            "applied": "Salvo — a geração usará este modelo local",
+            "applyFailed": "Falha ao salvar",
+            "installTitle": "Guia de instalação",
+            "installIntro": "O Ollama não está em execução nesta máquina. Instale e inicie conforme seu sistema operacional e clique em \"Verificar novamente\".",
+            "pullHint": "Depois instale um modelo (exemplo):"
         }
     }
 }

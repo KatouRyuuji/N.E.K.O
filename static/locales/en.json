@@ -4984,6 +4984,32 @@
             "title": "Companion Workshop",
             "empty": "No published companions yet.",
             "publish": "Publish to workshop"
+        },
+        "ollama": {
+            "title": "Ollama Local Model Setup",
+            "subtitle": "Detect local Ollama, pick a model, and route tiers to it in one click",
+            "wizardLink": "Local model (Ollama)",
+            "backToWizard": "Back to generator",
+            "probeTitle": "Probe status",
+            "statusChecking": "Checking…",
+            "statusAvailable": "Local Ollama detected",
+            "statusUnavailable": "Local Ollama not detected",
+            "recheck": "Re-check",
+            "baseUrlLabel": "Server URL",
+            "modelCountLabel": "Installed models",
+            "configTitle": "Pick a model",
+            "noModels": "Ollama is running but no model is installed yet. Pull one first:",
+            "modelLabel": "Model",
+            "tiersLabel": "Apply to",
+            "tierSummary": "Companion generation / summaries (summary)",
+            "tierConversation": "Text chat (conversation)",
+            "apply": "Save configuration",
+            "applying": "Saving…",
+            "applied": "Saved — companion generation will use this local model",
+            "applyFailed": "Save failed",
+            "installTitle": "Install guide",
+            "installIntro": "Ollama is not running on this machine. Install and start it for your OS, then click \"Re-check\".",
+            "pullHint": "Then install a model (example):"
         }
     }
 }

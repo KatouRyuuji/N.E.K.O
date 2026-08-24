@@ -4984,6 +4984,32 @@
             "title": "伴侣创意工坊",
             "empty": "尚无已上架的伴侣包。",
             "publish": "发布到工坊"
+        },
+        "ollama": {
+            "title": "Ollama 本地模型配置",
+            "subtitle": "检测本地 Ollama，选择模型，一键写入本地模型路由",
+            "wizardLink": "本地模型（Ollama）",
+            "backToWizard": "返回生成向导",
+            "probeTitle": "探测状态",
+            "statusChecking": "正在检测…",
+            "statusAvailable": "已检测到本地 Ollama",
+            "statusUnavailable": "未检测到本地 Ollama",
+            "recheck": "重新检测",
+            "baseUrlLabel": "服务地址",
+            "modelCountLabel": "已安装模型",
+            "configTitle": "选择模型",
+            "noModels": "Ollama 正在运行，但还没有安装模型。先拉取一个模型：",
+            "modelLabel": "选择模型",
+            "tiersLabel": "应用到",
+            "tierSummary": "伴侣生成 / 摘要（summary）",
+            "tierConversation": "文字对话（conversation）",
+            "apply": "保存配置",
+            "applying": "保存中…",
+            "applied": "已保存，伴侣生成将使用该本地模型",
+            "applyFailed": "保存失败",
+            "installTitle": "安装指引",
+            "installIntro": "本机尚未运行 Ollama。按操作系统完成安装并启动后，点击「重新检测」。",
+            "pullHint": "然后安装一个模型（示例）："
         }
     }
 }

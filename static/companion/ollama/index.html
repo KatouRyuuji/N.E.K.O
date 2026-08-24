@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>N.E.K.O. Ollama 本地模型配置</title>
+  <style>
+    :root {
+      --bg: #0f1220;
+      --bg-soft: #161a2e;
+      --card: rgba(255, 255, 255, 0.05);
+      --card-border: rgba(255, 255, 255, 0.09);
+      --text: #e8eaf6;
+      --text-dim: #9aa0c3;
+      --accent: #7c6cff;
+      --accent-soft: rgba(124, 108, 255, 0.18);
+      --green: #4ade80;
+      --amber: #fbbf24;
+      --red: #f87171;
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      background:
+        radial-gradient(1200px 600px at 80% -10%, rgba(124, 108, 255, 0.25), transparent 60%),
+        radial-gradient(900px 500px at -10% 110%, rgba(74, 222, 128, 0.12), transparent 60%),
+        var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      padding: 24px;
+    }
+    header {
+      max-width: 900px;
+      margin: 0 auto 20px;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    header h1 { font-size: 1.45rem; font-weight: 700; letter-spacing: 0.02em; }
+    header h1 span { color: var(--accent); }
+    header p { color: var(--text-dim); font-size: 0.85rem; }
+    header a { color: var(--accent); font-size: 0.85rem; text-decoration: none; }
+    header a:hover { text-decoration: underline; }
+    .grid {
+      max-width: 900px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 18px;
+      align-items: start;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 20px;
+      backdrop-filter: blur(12px);
+    }
+    .card h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .pill { display: inline-block; border-radius: 999px; padding: 1px 10px; font-size: 0.75rem; }
+    .pill.ok { background: rgba(74, 222, 128, 0.15); color: var(--green); }
+    .pill.err { background: rgba(248, 113, 113, 0.15); color: var(--red); }
+    .pill.busy { background: rgba(251, 191, 36, 0.15); color: var(--amber); }
+    .field { margin-bottom: 14px; }
+    .field label {
+      display: block;
+      font-size: 0.82rem;
+      color: var(--text-dim);
+      margin-bottom: 6px;
+    }
+    .field select {
+      width: 100%;
+      font: inherit;
+      color: var(--text);
+      background: var(--bg-soft);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 9px 12px;
+      outline: none;
+    }
+    .field select:focus { border-color: var(--accent); }
+    .kv { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; font-size: 0.85rem; }
+    .kv .k { color: var(--text-dim); flex: none; }
+    .kv .v { text-align: right; word-break: break-all; }
+    .tiers { display: flex; flex-direction: column; gap: 8px; }
+    .tiers label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+      color: var(--text);
+      cursor: pointer;
+    }
+    .tiers input[type="checkbox"] { accent-color: var(--accent); }
+    button {
+      font: inherit;
+      color: var(--text);
+      background: var(--accent-soft);
+      border: 1px solid rgba(124, 108, 255, 0.35);
+      border-radius: 10px;
+      padding: 8px 16px;
+      cursor: pointer;
+      transition: background 0.15s ease, transform 0.1s ease;
+    }
+    button:hover { background: rgba(124, 108, 255, 0.32); }
+    button:active { transform: scale(0.97); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.primary {
+      width: 100%;
+      padding: 12px;
+      font-weight: 600;
+      background: linear-gradient(135deg, rgba(124, 108, 255, 0.85), rgba(124, 108, 255, 0.55));
+      border: none;
+    }
+    button.ghost { background: transparent; border-color: var(--card-border); color: var(--text-dim); }
+    button.ghost:hover { color: var(--text); }
+    #apply-result { margin-top: 10px; font-size: 0.85rem; }
+    #apply-result.ok { color: var(--green); }
+    #apply-result.err { color: var(--red); }
+    .hint { font-size: 0.78rem; color: var(--text-dim); margin: 8px 0; }
+    pre.cmd {
+      background: var(--bg-soft);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 0.78rem;
+      overflow-x: auto;
+      margin: 6px 0 12px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .os-block h3 {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-dim);
+      margin: 10px 0 4px;
+    }
+    .os-block.current h3 { color: var(--accent); }
+    .empty { color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 14px 0; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1><span>N.E.K.O.</span> <span id="page-title" data-i18n="ollama.title">Ollama 本地模型配置</span></h1>
+    <p data-i18n="ollama.subtitle">检测本地 Ollama，选择模型，一键写入本地模型路由</p>
+    <a href="/static/companion/wizard/index.html" data-i18n="ollama.backToWizard">返回生成向导</a>
+  </header>
+
+  <main class="grid">
+    <section class="card">
+      <h2>
+        <span data-i18n="ollama.probeTitle">探测状态</span>
+        <span class="pill busy" id="probe-state" data-i18n="ollama.statusChecking">正在检测…</span>
+      </h2>
+      <div class="kv">
+        <span class="k" data-i18n="ollama.baseUrlLabel">服务地址</span>
+        <span class="v" id="base-url">—</span>
+      </div>
+      <div class="kv">
+        <span class="k" data-i18n="ollama.modelCountLabel">已安装模型</span>
+        <span class="v" id="model-count">—</span>
+      </div>
+      <div style="margin-top: 12px;">
+        <button id="recheck-btn" class="ghost" data-i18n="ollama.recheck">重新检测</button>
+      </div>
+    </section>
+
+    <section class="card" id="config-card" hidden>
+      <h2 data-i18n="ollama.configTitle">选择模型</h2>
+      <div id="no-models" hidden>
+        <p class="hint" data-i18n="ollama.noModels">Ollama 正在运行，但还没有安装模型。先拉取一个模型：</p>
+        <pre class="cmd">ollama pull llama3</pre>
+      </div>
+      <div id="model-picker">
+        <div class="field">
+          <label for="model-select" data-i18n="ollama.modelLabel">选择模型</label>
+          <select id="model-select"></select>
+        </div>
+        <div class="field">
+          <label data-i18n="ollama.tiersLabel">应用到</label>
+          <div class="tiers">
+            <label><input type="checkbox" id="tier-summary" checked />
+              <span data-i18n="ollama.tierSummary">伴侣生成 / 摘要（summary）</span></label>
+            <label><input type="checkbox" id="tier-conversation" />
+              <span data-i18n="ollama.tierConversation">文字对话（conversation）</span></label>
+          </div>
+        </div>
+        <button class="primary" id="apply-btn" data-i18n="ollama.apply">保存配置</button>
+        <div id="apply-result"></div>
+      </div>
+    </section>
+
+    <section class="card" id="install-card" hidden>
+      <h2 data-i18n="ollama.installTitle">安装指引</h2>
+      <p class="hint" data-i18n="ollama.installIntro">本机尚未运行 Ollama。按操作系统完成安装并启动后，点击「重新检测」。</p>
+      <div class="os-block" id="os-macos">
+        <h3>macOS</h3>
+        <pre class="cmd">brew install ollama
+ollama serve</pre>
+      </div>
+      <div class="os-block" id="os-windows">
+        <h3>Windows</h3>
+        <pre class="cmd">winget install Ollama.Ollama</pre>
+      </div>
+      <div class="os-block" id="os-linux">
+        <h3>Linux</h3>
+        <pre class="cmd">curl -fsSL https://ollama.com/install.sh | sh</pre>
+      </div>
+      <p class="hint" data-i18n="ollama.pullHint">然后安装一个模型（示例）：</p>
+      <pre class="cmd">ollama pull llama3</pre>
+    </section>
+  </main>
+
+  <script src="/static/companion/i18n.js"></script>
+  <script src="/static/companion/ollama/ollama.js"></script>
+</body>
+</html>
