@@ -19,7 +19,7 @@
 - [ ] 番茄钟 / Todo / 备忘 UI 面板
 - [ ] 多媒体状态监测与 Avatar 联动
 - [ ] 特效/装饰配置与 Live2D 表情联动
-- [ ] 生成向导前端（`static/companion/wizard/`）
+- [x] 生成向导前端（`static/companion/wizard/`，多模态上传 + 一键导入）
 
 ## Phase 4 — 跨平台与商业化
 
