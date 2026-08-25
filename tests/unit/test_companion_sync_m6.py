@@ -114,7 +114,7 @@ def _write_store(memory_dir, name=NAME, facts=None, persona=None):
 
 def _manager(tmp_path, facts=None, persona=None, characters=None):
   memory_dir = tmp_path / "memory"
-  memory_dir.mkdir(exist_ok=True)
+  memory_dir.mkdir(parents=True, exist_ok=True)
   if facts is not None or persona is not None:
     _write_store(memory_dir, facts=facts, persona=persona)
   characters = characters if characters is not None else {"猫娘": {NAME: {"昵称": NAME}}}
