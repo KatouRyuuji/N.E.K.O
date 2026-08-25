@@ -8,7 +8,11 @@ name: Companion Tests
 # exactly that.
 on:
   push:
-    branches: [main]
+    # cursor/** included besides main: companion milestones are developed by
+    # cloud agents whose VMs may lack PyPI egress — the push trigger gives
+    # them pytest feedback on the branch before the PR exists. Path-filtered,
+    # so unrelated pushes stay cheap.
+    branches: [main, 'cursor/**']
     paths:
       - 'companion/**'
       - 'config/companion_settings.py'
