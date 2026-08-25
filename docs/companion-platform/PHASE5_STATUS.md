@@ -53,6 +53,35 @@
 - [x] 开发者手册 en/ja/zh Companion 章节：metrics、Ollama 向导页、工坊 entry/asset API。
 - [x] [ROADMAP.md](./ROADMAP.md) / [GAP_ANALYSIS.md](./GAP_ANALYSIS.md) / [ARCHITECTURE.md](./ARCHITECTURE.md) 与 `main` 实现对齐。
 
+## Phase 5 第三波（M4 / M6，已完成）
+
+- [x] **M4** 记忆 / 人设深化（PR [#12](https://github.com/KatouRyuuji/N.E.K.O/pull/12)）：
+      语料 → fact 种子可选阶段（`GenerationInput.extract_fact_seeds`，默认关，
+      LLM-only 无启发式兜底；`bootstrap.py` 经 memory fact 写入路径落 fact 层，
+      带 `external_import` 溯源）；人设迭代
+      `POST /persona/{name}/refine`（`correction` tier → diff 提案，确认后
+      `POST /persona/{name}/refine/apply` 先快照后写回）；版本链
+      `GET /persona/{name}/versions` + `POST /persona/{name}/rollback`
+      （`companion/ai/persona_versions.py`，上限
+      `COMPANION_PERSONA_VERSION_MAX_SNAPSHOTS`）。
+      单测 `tests/unit/test_companion_memory_m4.py`（26 项）。
+- [x] **M6** 移动同步协议（PR [#11](https://github.com/KatouRyuuji/N.E.K.O/pull/11)）：
+      协议规范 [SYNC_PROTOCOL.md](./SYNC_PROTOCOL.md)（v1.0，只读、桌面权威）；
+      `GET /sync/manifest` 设备快照 + `GET /sync/memory/{name}?since=...`
+      记忆增量（`(created_at, id)` 复合游标，幂等 / 分页 / 断点续传；persona
+      层 digest 比对 + snapshot-on-change）。实现
+      `companion/sync/service.py`；双桌面实例验证闭环见协议 §7。
+      单测 `tests/unit/test_companion_sync_m6.py`（18 项）。
+- [x] CI 测试门禁：`.github/workflows/companion-tests.yml`（scoped pytest gate，
+      push `main`/`cursor/**` + PR，命令即验收命令）。
+- [x] 单测基线更新：`uv run pytest tests/unit/test_companion_*.py` →
+      **219 passed**（2026-08-25；175 + M4 26 项 + M6 18 项）。
+- [x] 历史分支追加（同「仅追溯，勿续写」规则）：
+      `cursor/companion-sync-m6-3e93`（#11）、`cursor/companion-memory-m4-3e93`（#12）。
+
+M1–M6 至此全部完成；第三波后规划（M7 / M8 / 剩余缺口）见
+[PHASE5_PROGRESS.md](./PHASE5_PROGRESS.md) 与 [PHASE5_PLAN.md](./PHASE5_PLAN.md)。
+
 ## M1 交接 — Ollama 一键配置向导（P0，已完成）
 
 认领 subagent 需要知道的现状与坑：

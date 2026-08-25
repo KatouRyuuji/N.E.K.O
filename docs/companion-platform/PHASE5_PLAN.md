@@ -195,10 +195,11 @@ M1 / M2 / M3 相互独立，可并行认领；M7 收口在 M2、M5 之后。
 
 ---
 
-## Phase 5 第二波（已合入 `main`）
+## Phase 5 第二、三波（已合入 `main`）
 
-> 执行快照见 [PHASE5_PROGRESS.md](./PHASE5_PROGRESS.md)。下列里程碑在第二波完成，
-> 第三波以 **M4 → M6** 为主（M7/M8 仍按上表 P2 排队）。
+> 执行快照见 [PHASE5_PROGRESS.md](./PHASE5_PROGRESS.md)。第二波交付
+> M1/M2/M3/M5，第三波交付 M4/M6——**M1–M6 全部完成**；后续以 M7/M8 收口
+> （见下「第三波后」）。
 
 | 里程碑 | 状态 | 备注 |
 |--------|------|------|
@@ -206,9 +207,16 @@ M1 / M2 / M3 相互独立，可并行认领；M7 收口在 M2、M5 之后。
 | M2 Avatar 持久化 | 已完成 | PR #8 |
 | M3 监控/指标 | 已完成 | `5297af8f` |
 | M5 工坊市场 UX | 已完成 | `b90efb72` |
-| M4 记忆/人设 | **待认领** | P1 |
-| M6 移动同步 | **待认领** | P1 |
-| M7 Electron | 未开始 | P2，依赖 M2+M5 |
-| M8 声线克隆 | 未开始 | P2 |
+| M4 记忆/人设 | 已完成 | PR [#12](https://github.com/KatouRyuuji/N.E.K.O/pull/12)：fact 种子（`extract_fact_seeds`）、refine/apply、版本链+回滚 |
+| M6 移动同步 | 已完成 | PR [#11](https://github.com/KatouRyuuji/N.E.K.O/pull/11)：[SYNC_PROTOCOL.md](./SYNC_PROTOCOL.md) v1.0、`/sync/manifest` + `/sync/memory/{name}` |
+| M7 Electron | **待认领** | P2，依赖 M2+M5（已就绪） |
+| M8 声线克隆 | **待认领** | P2 |
 
-**第三波验收习惯**：认领分支 → `uv run pytest tests/unit/test_companion_*.py` → PR → 合入 `main` 后更新 PHASE5_PROGRESS / STATUS。
+**验收习惯（沿用）**：认领分支 → `uv run pytest tests/unit/test_companion_*.py`
+（CI `companion-tests.yml` 在 push / PR 自动跑同一命令）→ PR → 合入 `main`
+后更新 PHASE5_PROGRESS / STATUS。当前基线 **219 passed**（2026-08-25）。
+
+**第三波后**：优先 **M7 Electron Shell**（依赖已全部就绪；建议把 M4 refine
+的确认式 diff UI 一并收进 Electron 页面），随后 **M8 声线克隆**；剩余体验
+缺口（#6 联动 / #7 装饰 / 移动端原生客户端）见
+[GAP_ANALYSIS.md](./GAP_ANALYSIS.md) 与 [PHASE5_PROGRESS.md](./PHASE5_PROGRESS.md)。

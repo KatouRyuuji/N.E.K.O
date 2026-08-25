@@ -36,5 +36,8 @@ Companion Platform（`companion/` 包，Phase 4 已集成）把语料、提示�
 - **对话会话** — `GET /api/companion/session/{character_name}` 返回文字 + 实时语音的聚合会话元数据（websocket 路由、脱敏 provider tier、协议帧）；`POST /api/companion/dialogue/session` 由 companion profile 生成双通道 connect info。
 - **长任务生成** — 生成端点支持 `?background=true`（立即返回 `202`，轮询 `GET /api/companion/generate/{task_id}`）；失败任务经 `POST /api/companion/generate/{task_id}/retry` 从失败阶段恢复——已完成的 LLM 阶段不会重跑。
 - **本地开源 AI 状态** — `GET /api/companion/ai/open-source` 探测本地 Ollama daemon（`OLLAMA_HOST`，默认 `http://127.0.0.1:11434`），返回可用性与解析出的模型 / base-URL 路由配置；未配置云端 key 时，生成 Pipeline 会自动降级到该路由（启发式为最终兜底）。
+- **语料 fact 种子（可选开启）** — 生成输入设置 `extract_fact_seeds: true` 后，Pipeline 增加一个 LLM 阶段，从语料抽取高置信事实写入包 manifest；导入时经记忆 fact 层落盘，带 `external_import` 溯源标记。设计为 LLM-only：LLM 不可用时返回空列表而不是编造事实（生成任务不会因此失败）。
+- **人设迭代与版本** — `POST /api/companion/persona/{name}/refine` 基于现有角色卡跑一轮 correction tier LLM，返回 diff 提案（不落盘；tier 未配置返回 `503`）；`POST /api/companion/persona/{name}/refine/apply` 在把旧卡片快照进版本链后写回已确认的提案；`GET /api/companion/persona/{name}/versions` 列出快照，`POST /api/companion/persona/{name}/rollback` 回滚（当前卡片会先快照，回滚本身也可撤销）。
+- **同步协议（只读）** — `GET /api/companion/sync/manifest` 返回设备级快照（每个已注册 companion 一条 `.neko-companion` manifest + 记忆游标）；`GET /api/companion/sync/memory/{name}?since=...` 为第二台桌面实例（移动端后置）提供幂等、可分页的 fact 层增量。桌面权威（desktop-authoritative），协议规范见 `docs/companion-platform/SYNC_PROTOCOL.md`。
 
 所有 Python 示例都使用 `uv run`。若文档与同 revision 的入口、loader 或 workflow 冲突，以当前代码为准并报告文档漂移。
