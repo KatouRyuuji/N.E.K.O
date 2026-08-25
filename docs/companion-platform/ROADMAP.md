@@ -1,6 +1,7 @@
 # Companion Platform Roadmap
 
-> 状态基准：Phase 4 集成已完成；Phase 5 第二波（M1/M2/M3/M5）已合入 `main`。
+> 状态基准：Phase 4 集成已完成；Phase 5 第二波（M1/M2/M3/M5）与第三波
+> （M4/M6）已合入 `main`——M1–M6 全部完成，剩 M7/M8（P2）。
 > 收尾与分支处置见 [PHASE5_STATUS.md](./PHASE5_STATUS.md)；进展见
 > [PHASE5_PROGRESS.md](./PHASE5_PROGRESS.md)。后续规划见 [PHASE5_PLAN.md](./PHASE5_PLAN.md)。
 
@@ -35,17 +36,19 @@
       `POST /api/companion/dialogue/session`）
 - [x] Companion 向导/工坊 8 语言 i18n（`static/locales` + `companion/i18n.js`）
 - [x] 开源 AI（Ollama）一键配置向导 → **Phase 5 M1 已完成**（`static/companion/ollama/`）
-- [ ] 移动端 Companion 同步协议 → **Phase 5 M6（P1，未开始）**
+- [x] 移动端 Companion 同步协议 → **Phase 5 M6 已完成**（[SYNC_PROTOCOL.md](./SYNC_PROTOCOL.md)）
 
-## Phase 5 — 深化与生态（进行中）
+## Phase 5 — 深化与生态（进行中，M1–M6 已完成）
 
 进度快照：[PHASE5_PROGRESS.md](./PHASE5_PROGRESS.md)。里程碑见 [PHASE5_PLAN.md](./PHASE5_PLAN.md)。
 
 - [x] **M1** Ollama 配置向导（PR #9）
 - [x] **M2** Avatar registry SQLite + 删除 API（PR #8）
 - [x] **M3** `GET /api/companion/metrics` + 阶段耗时（`5297af8f`）
-- [ ] **M4** 记忆 / 人设深度集成（P1）
+- [x] **M4** 记忆 / 人设深度集成（PR #12：`extract_fact_seeds` 语料 fact 种子、
+      persona refine/apply、版本链 + 回滚）
 - [x] **M5** 工坊卡片 / entry / asset API（`b90efb72`）
-- [ ] **M6** 移动端同步协议（P1）
-- [ ] **M7** Electron Companion Shell（P2）
+- [x] **M6** 移动端同步协议（PR #11：`/sync/manifest` + `/sync/memory/{name}`，
+      [SYNC_PROTOCOL.md](./SYNC_PROTOCOL.md) v1.0，双桌面实例验证）
+- [ ] **M7** Electron Companion Shell（P2，**下一优先**）
 - [ ] **M8** 声线克隆与 TTS 深化（P2）

@@ -1,14 +1,14 @@
 # Gap Analysis: 10 项必达功能
 
-> 更新于 Phase 5 第二波（M1/M2/M3/M5 已合入 `main`）。「Companion 侧现状」列反映
-> `companion/` 与 `static/companion/` 的实际实现；「剩余缺口」输入
-> [PHASE5_PLAN.md](./PHASE5_PLAN.md) 第三波（M4/M6–M8）。进展见
+> 更新于 Phase 5 第三波（M4/M6 已合入 `main`；累计 M1–M6 完成）。「Companion
+> 侧现状」列反映 `companion/` 与 `static/companion/` 的实际实现；「剩余缺口」
+> 输入 [PHASE5_PLAN.md](./PHASE5_PLAN.md) 收口阶段（M7/M8）。进展见
 > [PHASE5_PROGRESS.md](./PHASE5_PROGRESS.md)。
 
 | # | 功能 | N.E.K.O. 底座 | Companion 侧现状（Phase 4 后） | 剩余缺口 | 优先级 |
 |---|------|----------|------|------|--------|
-| 1 | 长期记忆 | 五维记忆系统 (`memory/`) | `memory_bridge.py` 桥接 + `bootstrap.py` 记忆种子写入（复用在跑 `PersonaManager`，导入后通知 `/reload`） | 生成语料 → fact/reflection 层的深度种子；跨设备记忆同步 | P1 |
-| 2 | 人设扮演 | 角色卡、`utils/prompt_state/` | `persona.py` 与 characters.json 双向映射 + 冲突改名注册 | 生成人设的迭代式微调 UI；人设版本管理 | P1 |
+| 1 | 长期记忆 | 五维记忆系统 (`memory/`) | `memory_bridge.py` 桥接 + `bootstrap.py` persona 种子与 fact 层种子（`extract_fact_seeds` 可选阶段，`external_import` 溯源）；跨设备同步协议 `GET /sync/manifest` + `GET /sync/memory/{name}`（[SYNC_PROTOCOL.md](./SYNC_PROTOCOL.md)） | 移动端原生客户端（协议已双桌面验证，客户端后置） | P2 |
+| 2 | 人设扮演 | 角色卡、`utils/prompt_state/` | `persona.py` 双向映射 + `POST /persona/{name}/refine`（diff 提案）/`refine/apply`（快照后写回）+ 版本链 `versions`/`rollback` | refine 的确认式 diff **UI**（API 已就绪，建议随 M7 页面落地） | P2 |
 | 3 | TTS | `utils/tts/` 多 provider | `tts_bridge.py` 声线配置 + `voice_mapping.py` 参考音频映射 + `/tts/preview` | 参考音频真实声线克隆（当前为映射启发式） | P2 |
 | 4 | 实时语音对话 | Realtime API、`websocket_router` | `realtime_voice.py` facade：协议帧 + `realtime` tier 脱敏配置 + session 元数据 API | 无（facade 完成；语音全链路由核心承担） | — |
 | 5 | 实时文字对话 | ChatCompletion、`react-neko-chat` | `chat.py` facade：协议帧 + `conversation` tier + `POST /dialogue/session` | 无（facade 完成；聊天 UI 复用 react-neko-chat） | — |
@@ -18,10 +18,13 @@
 | 9 | 形象热替换 | `model_manager`、多格式切换 | SQLite 持久化 registry + swap panel + `DELETE /avatar/{id}`；重启后 list/active/resource 可恢复 | 包目录 GC 策略细化；与 workshop 导出目录的联动文档 | P2 |
 | 10 | 开源 AI + 程序化生成 | `config/api_providers.json` | Pipeline 7 阶段 + HA + `static/companion/ollama/` + `POST /ai/open-source/config` + `GET /metrics` 可观测 | 生成质量评估；更多本地 provider | P2 |
 
-## 覆盖率摘要（Phase 5 第二波后）
+## 覆盖率摘要（Phase 5 第三波后）
 
 - **已交付**：10 项功能全部有可用实现；#4、#5、#8 无功能级缺口。
 - **第二波已闭合**：#9 registry 持久化、#10 Ollama 向导 UI；横向 **监控/指标（M3）**、
   **工坊市场 UX（M5）**。
-- **第三波深化**：#1 记忆 fact 种子与跨设备同步（M4/M6）、#2 人设迭代/版本（M4）、
-  #3/#6/#7 体验与 TTS（M8）、Electron Shell（M7）。
+- **第三波已闭合**：#1 记忆 fact 种子 + 跨设备同步协议（M4/M6）、
+  #2 人设迭代/版本 API（M4）。
+- **收口阶段（第三波后）**：**M7 Electron Shell**（优先，顺带承载 refine
+  diff UI）、**M8 声线克隆**（#3）；剩余体验项 #6 深度联动、#7 更多装饰
+  类型、移动端原生客户端（协议之外，明确后置）。
