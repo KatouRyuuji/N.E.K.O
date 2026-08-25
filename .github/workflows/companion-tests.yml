@@ -1,0 +1,68 @@
+name: Companion Tests
+
+# Pytest gate for the companion platform, symmetric to plugin-tests.yml
+# (same rationale: subsystem PRs need a scoped test gate so drift surfaces
+# in CI instead of on the next manual full run). Phase 5 milestones agreed
+# on `uv run pytest tests/unit/test_companion_*.py` as the acceptance
+# command (docs/companion-platform/PHASE5_PLAN.md) — this workflow runs
+# exactly that.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'companion/**'
+      - 'config/companion_settings.py'
+      - 'config/prompts/prompts_companion.py'
+      - 'tests/unit/test_companion_*.py'
+      - '.github/workflows/companion-tests.yml'
+      # Dependency changes alter the test/runtime environment — without
+      # these a deps-only PR skips the gate (same note as plugin-tests.yml).
+      - 'pyproject.toml'
+      - 'uv.lock'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'companion/**'
+      - 'config/companion_settings.py'
+      - 'config/prompts/prompts_companion.py'
+      - 'tests/unit/test_companion_*.py'
+      - '.github/workflows/companion-tests.yml'
+      - 'pyproject.toml'
+      - 'uv.lock'
+  workflow_dispatch:
+
+# The test job only needs to read the checked-out source.
+permissions:
+  contents: read
+
+concurrency:
+  group: companion-tests-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  companion-pytest:
+    name: Companion pytest (Linux)
+    # ubuntu, not windows: the companion suite is platform-agnostic (SQLite
+    # stores, FastAPI TestClient, mocked LLMs) and has been developed/verified
+    # on Linux throughout Phase 1–5; there are no win32 code paths.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        # Plain `uv sync` = main deps + dev group (pytest, pytest-asyncio).
+        run: uv sync
+
+      - name: Run companion test suite
+        run: uv run pytest tests/unit/test_companion_*.py -q
