@@ -37,6 +37,9 @@ Route groups, all mounted through ``main_routers/companion_router``:
   ``POST /persona/{name}/refine/apply`` (confirm → snapshot + write),
   ``GET /persona/{name}/versions`` and ``POST /persona/{name}/rollback``
   (characters.json version chain).
+- sync protocol (Phase 5 M6): ``GET /sync/manifest`` and
+  ``GET /sync/memory/{name}`` — read-only, desktop-authoritative, see
+  ``docs/companion-platform/SYNC_PROTOCOL.md``.
 """
 
 from __future__ import annotations
@@ -260,6 +263,7 @@ async def companion_platform_info():
       "metrics",
       "persona_refine",
       "persona_versions",
+      "sync_protocol",
     ],
   }
 
@@ -281,6 +285,46 @@ async def companion_metrics():
     )
 
   return await asyncio.to_thread(_collect)
+
+
+@router.get("/sync/manifest")
+async def companion_sync_manifest():
+  """Device-level sync snapshot (Phase 5 M6, read-only).
+
+  Lists every registered companion as a ``.neko-companion`` manifest (the
+  protocol exchange unit) plus its memory cursor. Auth rides the main
+  server's existing mechanisms — the router adds none of its own. The
+  build reads characters.json + per-character memory files synchronously,
+  so it runs on a worker thread.
+  """
+  from companion.sync.service import build_sync_manifest
+
+  return await asyncio.to_thread(build_sync_manifest)
+
+
+@router.get("/sync/memory/{name}")
+async def companion_sync_memory_delta(
+  name: str,
+  since: str = "",
+  limit: int = 500,
+  include_persona: bool = False,
+):
+  """Incremental fact-layer memory read for one companion (Phase 5 M6).
+
+  ``since`` is the opaque cursor from a previous response's
+  ``next_cursor`` (or a plain ISO timestamp for time-based resume; empty =
+  full bootstrap). The fetch is idempotent: an unchanged store returns an
+  identical page for the same cursor. Unknown characters 404 — the same
+  registration source (characters.json) the dialogue routes rely on.
+  """
+  from companion.sync.service import UnknownCompanionError, memory_delta
+
+  try:
+    return await asyncio.to_thread(
+      memory_delta, name, since, limit, include_persona
+    )
+  except UnknownCompanionError:
+    raise HTTPException(status_code=404, detail="companion not found")
 
 
 @router.get("/session/{character_name}")
