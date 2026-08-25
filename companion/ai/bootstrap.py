@@ -35,12 +35,17 @@ import json
 from pathlib import Path
 
 from companion.models.generation import GenerationArtifact
-from companion.models.manifest import CompanionManifest, MemorySeed
+from companion.models.manifest import CompanionManifest, FactSeed, MemorySeed
 from companion.models.profile import CompanionProfile
 
 # `source` recorded on every seeded persona entry, so seeds are
 # distinguishable from conversation-derived facts in persona.json.
 SEED_SOURCE = "companion_seed"
+
+# `external_import.format` stamped on every fact-layer seed (Phase 5 M4), so
+# corpus-derived facts carry provenance in facts.json and — like external
+# markdown imports — skip the Stage-2 evidence loop.
+FACT_SEED_IMPORT_FORMAT = "companion_seed"
 
 # PersonaManager entity sections (see memory/persona/manager.py docstring).
 VALID_SEED_ENTITIES = frozenset({"master", "neko", "relationship"})
@@ -84,6 +89,78 @@ def _resolve_persona_manager():
   from memory.persona.manager import PersonaManager
 
   return PersonaManager()
+
+
+def _resolve_fact_store():
+  """Return the fact store to write corpus fact seeds through.
+
+  Mirrors :func:`_resolve_persona_manager`: prefer the live memory_server
+  ``FactStore`` (same process, FTS index + in-memory cache stay coherent);
+  fall back to a standalone store over the same on-disk facts.json.
+  """
+  try:
+    from app.memory_server import runtime as memory_runtime
+
+    store = getattr(memory_runtime, "fact_store", None)
+    if store is not None:
+      return store
+  except Exception:
+    pass
+  from memory.facts import FactStore
+
+  return FactStore()
+
+
+async def seed_fact_layer(
+  character_name: str,
+  fact_seeds: list[FactSeed],
+  fact_store=None,
+) -> dict:
+  """Write corpus fact seeds into the memory **fact layer** (Phase 5 M4).
+
+  Reuses the canonical FactStore persistence path (SHA-256 + FTS5 dedup,
+  atomic facts.json write, time-index registration) by handing pre-extracted
+  fact dicts to ``_apersist_new_facts`` — the same entry the conversation
+  and external-import pipelines converge on. The ``_external_import``
+  provenance marks the entries as ``companion_seed`` and keeps them out of
+  the Stage-2 evidence loop (they are declarative package content, not
+  conversational observations). Once persisted, the facts are picked up by
+  reflection synthesis / recall like any other Tier-1 fact.
+  """
+  store = fact_store if fact_store is not None else _resolve_fact_store()
+  extracted: list[dict] = []
+  skipped = 0
+  for seed in fact_seeds:
+    content = seed.content.strip()
+    if not content:
+      skipped += 1
+      continue
+    extracted.append(
+      {
+        "text": content,
+        "entity": seed.entity,
+        "importance": seed.importance,
+        "_external_import": {
+          "format": FACT_SEED_IMPORT_FORMAT,
+          "confidence": seed.confidence,
+        },
+      }
+    )
+  new_facts = (
+    # Private by convention, but it IS the memory pipeline's single fact
+    # write path (see FactStore docstring); duplicating dedup/persist logic
+    # here would fork the format.
+    await store._apersist_new_facts(character_name, extracted)
+    if extracted
+    else []
+  )
+  return {
+    "character_name": character_name,
+    "facts_total": len(fact_seeds),
+    "facts_added": len(new_facts),
+    "facts_skipped": skipped + (len(extracted) - len(new_facts)),
+    "fact_ids": [f.get("id") for f in new_facts],
+  }
 
 
 async def seed_memory(
@@ -133,13 +210,25 @@ async def bootstrap_from_artifact(
   profile: CompanionProfile,
   artifact: GenerationArtifact,
   persona_manager=None,
+  fact_store=None,
 ) -> dict:
-  """Seed the memory service from a completed generation artifact."""
+  """Seed the memory service from a completed generation artifact.
+
+  Persona seeds land in the persona layer (rendered into the first
+  ``GET /new_dialog/{name}`` context via ``arender_persona_markdown``);
+  fact seeds — when the generator's opt-in M4 stage produced any — land in
+  the Tier-1 fact layer through :func:`seed_fact_layer`.
+  """
   manifest = load_manifest_from_artifact(artifact)
   seeds = list(manifest.memory_seeds) if manifest is not None else []
   result = await seed_memory(
     profile.resolved_memory_name(), seeds, persona_manager=persona_manager
   )
+  fact_seeds = list(manifest.fact_seeds) if manifest is not None else []
+  if fact_seeds:
+    result["fact_layer"] = await seed_fact_layer(
+      profile.resolved_memory_name(), fact_seeds, fact_store=fact_store
+    )
   result["persona"] = profile.system_prompt
   result["package_path"] = artifact.package_path
   return result

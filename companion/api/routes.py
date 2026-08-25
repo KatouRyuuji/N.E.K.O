@@ -32,6 +32,11 @@ Route groups, all mounted through ``main_routers/companion_router``:
   (Phase 5 M1): ``/ai/open-source/config``; TTS preview: ``/tts/preview``;
 - metrics (Phase 5 M3): ``GET /metrics`` — generation/workshop/productivity
   aggregates; per-task ``stage_timings_ms`` on ``GET /generate/{task_id}``;
+- persona iteration (Phase 5 M4): ``POST /persona/{name}/refine``
+  (correction-tier LLM → diff proposal, no write),
+  ``POST /persona/{name}/refine/apply`` (confirm → snapshot + write),
+  ``GET /persona/{name}/versions`` and ``POST /persona/{name}/rollback``
+  (characters.json version chain).
 - sync protocol (Phase 5 M6): ``GET /sync/manifest`` and
   ``GET /sync/memory/{name}`` — read-only, desktop-authoritative, see
   ``docs/companion-platform/SYNC_PROTOCOL.md``.
@@ -256,6 +261,8 @@ async def companion_platform_info():
       "avatar_swap",
       "companion_generator",
       "metrics",
+      "persona_refine",
+      "persona_versions",
       "sync_protocol",
     ],
   }
@@ -657,6 +664,14 @@ async def import_companion_package(body: ImportPackageRequest):
   if body.bootstrap_memory:
     memory_name = character_name or profile.resolved_memory_name()
     result["memory"] = await seed_memory(memory_name, manifest.memory_seeds)
+    if manifest.fact_seeds:
+      # Phase 5 M4: corpus-derived high-confidence facts go to the Tier-1
+      # fact layer, keyed by the same final card key as the persona seeds.
+      from companion.ai.bootstrap import seed_fact_layer
+
+      result["memory"]["fact_layer"] = await seed_fact_layer(
+        memory_name, manifest.fact_seeds
+      )
 
   if body.load_avatar:
     try:
@@ -706,6 +721,170 @@ async def import_generated_companion(task_id: str, activate: bool = True):
   if content.get("avatar") is not None:
     payload["avatar"] = content["avatar"]
   return JSONResponse(status_code=201, content=payload)
+
+
+# ── Phase 5 M4: persona refine / versioning ────────────────────────────────
+
+
+def _resolve_config_manager():
+  """Config manager indirection so unit tests can inject an in-memory fake."""
+  from utils.config_manager import get_config_manager
+
+  return get_config_manager()
+
+
+async def _load_catgirl_card(name: str, config_manager) -> tuple[dict, dict]:
+  """Load characters.json and return ``(characters, card)``; 404 when absent."""
+  characters = await config_manager.aload_characters()
+  card = characters.get("猫娘", {}).get(name)
+  if card is None:
+    raise HTTPException(status_code=404, detail="character not found")
+  return characters, card
+
+
+class PersonaRefineRequest(BaseModel):
+  feedback: str = Field(min_length=1, max_length=10000)
+  locale: str = "zh-CN"
+
+
+class PersonaRefineApplyRequest(BaseModel):
+  system_prompt: str = Field(min_length=1)
+  # Optional mid-air-collision guard: when provided, the card's current
+  # prompt must still match what the refine proposal was computed against.
+  expected_system_prompt: str | None = None
+
+
+class PersonaRollbackRequest(BaseModel):
+  version: int | None = None
+
+
+@router.post("/persona/{name}/refine")
+async def refine_persona(name: str, body: PersonaRefineRequest):
+  """One correction-tier LLM round over the existing card (Phase 5 M4).
+
+  Returns a diff proposal for confirm-before-write; nothing is persisted
+  here. ``503`` when the correction tier is not configured (no silent model
+  fallback — neko-guide tier semantics), ``502`` when the LLM round yields
+  no usable revision.
+  """
+  from companion.ai.refine import (
+    PersonaRefineFailed,
+    PersonaRefineUnavailable,
+    refine_persona_card,
+  )
+  from utils.config_manager import get_reserved
+
+  config_manager = _resolve_config_manager()
+  _, card = await _load_catgirl_card(name, config_manager)
+  current_prompt = str(
+    get_reserved(card, "system_prompt", default="", legacy_keys=("system_prompt",))
+    or ""
+  )
+  try:
+    # Sync LLM call: offload so the shared event loop is never blocked.
+    proposal = await asyncio.to_thread(
+      refine_persona_card, name, current_prompt, body.feedback, body.locale
+    )
+  except PersonaRefineUnavailable as exc:
+    raise HTTPException(status_code=503, detail=str(exc))
+  except PersonaRefineFailed as exc:
+    raise HTTPException(status_code=502, detail=str(exc))
+  return {"name": name, "proposal": proposal, "applied": False}
+
+
+@router.post("/persona/{name}/refine/apply")
+async def apply_persona_refine(name: str, body: PersonaRefineApplyRequest):
+  """Confirmed write-back of a refine proposal.
+
+  The previous card body is snapshotted into the version chain **before**
+  the characters.json write, so the change is always revertible via
+  ``POST /persona/{name}/rollback``. ``409`` when the card's prompt changed
+  since the proposal was computed (``expected_system_prompt`` mismatch).
+  """
+  from companion.ai import persona_versions
+  from utils.config_manager import get_reserved, set_reserved
+
+  config_manager = _resolve_config_manager()
+  characters, card = await _load_catgirl_card(name, config_manager)
+  current_prompt = str(
+    get_reserved(card, "system_prompt", default="", legacy_keys=("system_prompt",))
+    or ""
+  )
+  if (
+    body.expected_system_prompt is not None
+    and body.expected_system_prompt != current_prompt
+  ):
+    raise HTTPException(
+      status_code=409,
+      detail="card changed since the refine proposal was computed",
+    )
+
+  # Snapshot first: a crash between snapshot and save leaves an extra
+  # version entry, never an unversioned overwrite. Sync file IO → offload.
+  snapshot = await asyncio.to_thread(
+    persona_versions.snapshot_card, name, card, reason="refine_apply"
+  )
+  set_reserved(card, "system_prompt", body.system_prompt)
+  await config_manager.asave_characters(characters)
+  reloaded = await _notify_memory_server_reload_safe(
+    reason=f"companion persona refine: {name}"
+  )
+  return {
+    "applied": True,
+    "name": name,
+    "system_prompt": body.system_prompt,
+    "previous_version": snapshot,
+    "memory_server_reloaded": reloaded,
+  }
+
+
+@router.get("/persona/{name}/versions")
+async def list_persona_versions(name: str):
+  from companion.ai import persona_versions
+
+  config_manager = _resolve_config_manager()
+  await _load_catgirl_card(name, config_manager)
+  versions = await asyncio.to_thread(persona_versions.list_versions, name)
+  return {"name": name, "versions": versions}
+
+
+@router.post("/persona/{name}/rollback")
+async def rollback_persona(name: str, body: PersonaRollbackRequest):
+  """Restore a snapshotted card version (Phase 5 M4).
+
+  Defaults to the most recent snapshot. The card **key** never changes, so
+  the memory files keyed by the character name (persona.json / facts.json)
+  stay consistent with the restored card; the current card is snapshotted
+  (``pre_rollback``) before the write, making rollbacks revertible too.
+  """
+  from companion.ai import persona_versions
+
+  config_manager = _resolve_config_manager()
+  characters, card = await _load_catgirl_card(name, config_manager)
+
+  if body.version is not None:
+    target = await asyncio.to_thread(persona_versions.get_version, name, body.version)
+  else:
+    target = await asyncio.to_thread(persona_versions.latest_version, name)
+  if target is None or not isinstance(target.get("card"), dict):
+    raise HTTPException(status_code=404, detail="no such persona version snapshot")
+
+  await asyncio.to_thread(
+    persona_versions.snapshot_card, name, card, reason="pre_rollback"
+  )
+  characters.setdefault("猫娘", {})[name] = target["card"]
+  await config_manager.asave_characters(characters)
+  reloaded = await _notify_memory_server_reload_safe(
+    reason=f"companion persona rollback: {name}"
+  )
+  return {
+    "rolled_back": True,
+    "name": name,
+    "restored_version": target["version"],
+    "card": target["card"],
+    "memory_character_name": name,
+    "memory_server_reloaded": reloaded,
+  }
 
 
 @router.get("/productivity/status")

@@ -41,17 +41,20 @@ from typing import Any
 
 from companion.generator.tasks import GenerationTask, TaskStatus, get_task_store
 from companion.models.generation import GenerationArtifact, GenerationInput, GenerationStage
-from companion.models.manifest import CompanionManifest, MemorySeed
+from companion.models.manifest import CompanionManifest, FactSeed, MemorySeed
 from companion.models.profile import AvatarKind, CompanionProfile, VoiceConfig
 from config import (
   COMPANION_ANALYSIS_CONTEXT_MAX_TOKENS,
   COMPANION_CORPUS_MAX_TOKENS,
+  COMPANION_FACT_SEED_MAX_SEEDS,
+  COMPANION_FACT_SEED_MIN_CONFIDENCE,
   COMPANION_GENERATOR_LLM_TIMEOUT_SECONDS,
   COMPANION_PROMPT_SEED_MAX_TOKENS,
   LLM_OUTPUT_GUARD_MAX_TOKENS,
 )
 from config.prompts.prompts_companion import (
   COMPANION_CORPUS_ANALYSIS_PROMPT,
+  COMPANION_FACT_SEED_PROMPT,
   COMPANION_PERSONA_EXTRACT_PROMPT,
   _loc,
 )
@@ -67,6 +70,7 @@ _PIPELINE_STAGES: tuple[GenerationStage, ...] = (
   GenerationStage.INGEST,
   GenerationStage.ANALYZE_CORPUS,
   GenerationStage.EXTRACT_PERSONA,
+  GenerationStage.EXTRACT_FACT_SEEDS,
   GenerationStage.CONFIGURE_AVATAR,
   GenerationStage.CONFIGURE_VOICE,
   GenerationStage.INIT_MEMORY,
@@ -249,6 +253,64 @@ def _default_memory_seeds(gen_input: GenerationInput) -> list[MemorySeed]:
   ]
 
 
+def _extract_fact_seeds_llm(gen_input: GenerationInput, llm: Any) -> list[FactSeed]:
+  """LLM-backed corpus → fact-seed extraction (Phase 5 M4, opt-in stage).
+
+  Returns only the seeds whose self-reported confidence clears
+  ``COMPANION_FACT_SEED_MIN_CONFIDENCE``. Facts are ground truth for the
+  memory fact layer, so there is deliberately **no heuristic fallback**:
+  when the LLM is unreachable or replies garbage the stage yields an empty
+  list instead of fabricating "facts" — the generation task never fails
+  because of this stage.
+  """
+  text = (gen_input.corpus_text or "").strip()
+  if not text:
+    return []
+  # Same HEAD+TAIL budget rationale as the analyze_corpus stage.
+  _half = COMPANION_CORPUS_MAX_TOKENS // 2
+  prompt = _loc(
+    COMPANION_FACT_SEED_PROMPT, _resolve_prompt_lang(gen_input.locale)
+  ) % (
+    gen_input.companion_name,
+    truncate_head_tail_tokens(text, _half, _half),
+  )
+  try:
+    resp = llm.invoke([{"role": "user", "content": prompt}])
+    data = _parse_llm_json(resp.content)
+  except Exception:
+    logger.warning("Companion generator: fact seed LLM call failed", exc_info=True)
+    return []
+  if not isinstance(data, dict) or not isinstance(data.get("facts"), list):
+    return []
+  seeds: list[FactSeed] = []
+  for raw in data["facts"]:
+    if not isinstance(raw, dict):
+      continue
+    content = str(raw.get("content", "") or "").strip()
+    if not content:
+      continue
+    try:
+      confidence = float(raw.get("confidence", 0.0))
+    except (TypeError, ValueError):
+      confidence = 0.0
+    if confidence < COMPANION_FACT_SEED_MIN_CONFIDENCE:
+      continue
+    try:
+      importance = int(raw.get("importance", 6))
+    except (TypeError, ValueError):
+      importance = 6
+    entity = str(raw.get("entity", "") or "").strip() or "master"
+    seeds.append(
+      FactSeed(
+        entity=entity,
+        content=content,
+        importance=max(1, min(importance, 10)),
+        confidence=max(0.0, min(confidence, 1.0)),
+      )
+    )
+  return seeds[:COMPANION_FACT_SEED_MAX_SEEDS]
+
+
 def _extract_persona_fallback(
   gen_input: GenerationInput, analysis: dict[str, Any]
 ) -> tuple[str, list[MemorySeed]]:
@@ -314,6 +376,9 @@ def _restore_checkpoints(task: GenerationTask) -> dict[str, Any]:
     "memory_seeds": [
       MemorySeed.model_validate(s) for s in results.get("memory_seeds") or []
     ],
+    "fact_seeds": [
+      FactSeed.model_validate(s) for s in results.get("fact_seeds") or []
+    ],
     "avatar_kind": (
       AvatarKind(results["avatar_kind"]) if results.get("avatar_kind")
       else AvatarKind.LIVE2D
@@ -348,6 +413,7 @@ def run_pipeline_sync(task: GenerationTask, output_root: Path | None = None) -> 
   analysis: dict[str, Any] = state["analysis"]
   system_prompt: str = state["system_prompt"]
   memory_seeds: list[MemorySeed] = state["memory_seeds"]
+  fact_seeds: list[FactSeed] = state["fact_seeds"]
   avatar_kind: AvatarKind = state["avatar_kind"]
   avatar_id: str = state["avatar_id"]
   voice: VoiceConfig = state["voice"]
@@ -362,6 +428,10 @@ def run_pipeline_sync(task: GenerationTask, output_root: Path | None = None) -> 
   needs_llm = (
     GenerationStage.ANALYZE_CORPUS not in completed
     or GenerationStage.EXTRACT_PERSONA not in completed
+    or (
+      gen_input.extract_fact_seeds
+      and GenerationStage.EXTRACT_FACT_SEEDS not in completed
+    )
   )
   if needs_llm:
     api_config = _resolve_generator_api_config()
@@ -424,6 +494,17 @@ def run_pipeline_sync(task: GenerationTask, output_root: Path | None = None) -> 
         ]
         task.stage_results["llm_meta"] = llm_meta
 
+      elif stage == GenerationStage.EXTRACT_FACT_SEEDS:
+        # Opt-in (Phase 5 M4): default OFF — the stage checkpoints an empty
+        # list so a resumed task never re-enters it.
+        if gen_input.extract_fact_seeds and llm is not None:
+          fact_seeds = _extract_fact_seeds_llm(gen_input, llm)
+        else:
+          fact_seeds = []
+        task.stage_results["fact_seeds"] = [
+          s.model_dump(mode="json") for s in fact_seeds
+        ]
+
       elif stage == GenerationStage.CONFIGURE_AVATAR:
         avatar_kind = AvatarKind.LIVE2D
         avatar_id = gen_input.live2d_model_id or ""
@@ -472,6 +553,7 @@ def run_pipeline_sync(task: GenerationTask, output_root: Path | None = None) -> 
         manifest = CompanionManifest(
           profile=profile,
           memory_seeds=memory_seeds,
+          fact_seeds=fact_seeds,
           resource_paths=resource_paths,
           generator_metadata={"analysis": analysis, "llm": llm_meta},
         )

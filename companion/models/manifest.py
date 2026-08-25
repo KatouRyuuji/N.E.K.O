@@ -35,12 +35,29 @@ class MemorySeed(BaseModel):
   importance: str = "normal"
 
 
+class FactSeed(BaseModel):
+  """High-confidence corpus fact destined for the memory fact layer (M4).
+
+  Unlike :class:`MemorySeed` (persona layer), fact seeds are written through
+  the FactStore pipeline at import time. ``confidence`` is the generator
+  LLM's self-reported certainty — only seeds above the pipeline threshold
+  make it into the manifest in the first place, but the value is kept for
+  provenance/auditing.
+  """
+
+  entity: str = "master"
+  content: str
+  importance: int = 6
+  confidence: float = 1.0
+
+
 class CompanionManifest(BaseModel):
   """Portable companion package manifest (manifest.json)."""
 
   version: ManifestVersion = ManifestVersion.V1
   profile: CompanionProfile
   memory_seeds: list[MemorySeed] = Field(default_factory=list)
+  fact_seeds: list[FactSeed] = Field(default_factory=list)
   resource_paths: dict[str, str] = Field(default_factory=dict)
   generator_metadata: dict[str, Any] = Field(default_factory=dict)
 
