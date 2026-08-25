@@ -186,3 +186,175 @@ Requirements:
 2. Предоставьте 2-5 memory_seeds с конкретным, долговечным содержанием.
 3. Опирайтесь только на анализ и затравку пользователя; не выдумывайте противоречащих настроек.""",
 }
+
+
+# ---------- fact seed extraction (Phase 5 M4, opt-in stage) ----------
+# %s placeholders: (companion_name, corpus_text)
+
+COMPANION_FACT_SEED_PROMPT = {
+    'zh': """你是一个记忆事实抽取专家。用户想为名为「%s」的虚拟伴侣建立长期记忆，下面是用户提供的语料：
+
+======以下为语料======
+%s
+======以上为语料======
+
+请从语料中抽取**高置信度的原子事实**，只返回如下 JSON（不要附加任何解释文本）：
+{"facts": [{"entity": "master 或 neko 或 relationship", "content": "一句完整、独立成立的事实", "importance": 1到10的整数, "confidence": 0.0到1.0的小数}]}
+
+要求：
+1. 只抽取语料中**明确陈述**的事实，推测、演绎、氛围描写一律不要。
+2. entity 含义：master=用户本人的事实，neko=该伴侣角色自身的事实，relationship=两者关系的事实。
+3. confidence 为你对该事实真实成立的把握，仅对语料原文直接支持的事实给 0.8 以上。
+4. 最多 10 条；语料中没有可靠事实时返回 {"facts": []}。""",
+
+    'en': """You are a memory-fact extraction expert. The user wants to build long-term memory for a virtual companion named "%s". Below is the corpus the user provided:
+
+======corpus begins======
+%s
+======corpus ends======
+
+Extract **high-confidence atomic facts** from the corpus and return ONLY the following JSON (no extra prose):
+{"facts": [{"entity": "master or neko or relationship", "content": "one complete, self-contained fact sentence", "importance": integer 1-10, "confidence": decimal 0.0-1.0}]}
+
+Requirements:
+1. Only extract facts that are **explicitly stated** in the corpus; no speculation, deduction or mood description.
+2. entity meaning: master = a fact about the user, neko = a fact about the companion character itself, relationship = a fact about their relationship.
+3. confidence is your certainty that the fact holds; only give 0.8+ to facts directly supported by the corpus text.
+4. At most 10 facts; return {"facts": []} when the corpus has no reliable facts.""",
+
+    'ja': """あなたは記憶事実抽出の専門家です。ユーザーは「%s」という名前のバーチャルコンパニオンの長期記憶を構築しようとしています。以下はユーザーが提供したコーパスです：
+
+======コーパス開始======
+%s
+======コーパス終了======
+
+コーパスから**高置信度の原子的事実**を抽出し、次の JSON のみを返してください（説明文は一切不要）：
+{"facts": [{"entity": "master / neko / relationship のいずれか", "content": "単独で成立する完結した一文の事実", "importance": 1〜10の整数, "confidence": 0.0〜1.0の小数}]}
+
+要件：
+1. コーパスに**明示的に記述された**事実のみを抽出し、推測・演繹・雰囲気描写は含めないこと。
+2. entity の意味：master=ユーザー本人の事実、neko=コンパニオンキャラ自身の事実、relationship=両者の関係の事実。
+3. confidence はその事実が成立する確信度。コーパス原文が直接裏付ける事実にのみ 0.8 以上を与えること。
+4. 最大 10 件。信頼できる事実がない場合は {"facts": []} を返すこと。""",
+
+    'ko': """당신은 기억 사실 추출 전문가입니다. 사용자가 「%s」라는 이름의 가상 컴패니언을 위한 장기 기억을 구축하려고 합니다. 아래는 사용자가 제공한 코퍼스입니다:
+
+======코퍼스 시작======
+%s
+======코퍼스 끝======
+
+코퍼스에서 **높은 확신도의 원자적 사실**을 추출하고 다음 JSON만 반환하세요(설명 텍스트 금지):
+{"facts": [{"entity": "master 또는 neko 또는 relationship", "content": "단독으로 성립하는 완결된 한 문장의 사실", "importance": 1~10의 정수, "confidence": 0.0~1.0의 소수}]}
+
+요구 사항:
+1. 코퍼스에 **명시적으로 서술된** 사실만 추출하고 추측, 연역, 분위기 묘사는 제외할 것.
+2. entity 의미: master=사용자 본인에 대한 사실, neko=컴패니언 캐릭터 자신에 대한 사실, relationship=둘의 관계에 대한 사실.
+3. confidence는 해당 사실이 성립한다는 확신도이며, 코퍼스 원문이 직접 뒷받침하는 사실에만 0.8 이상을 부여할 것.
+4. 최대 10개. 신뢰할 수 있는 사실이 없으면 {"facts": []}를 반환할 것.""",
+
+    'ru': """Вы — эксперт по извлечению фактов для памяти. Пользователь хочет построить долговременную память для виртуального компаньона по имени «%s». Ниже приведён корпус, предоставленный пользователем:
+
+======начало корпуса======
+%s
+======конец корпуса======
+
+Извлеките из корпуса **атомарные факты с высокой достоверностью** и верните ТОЛЬКО следующий JSON (без пояснений):
+{"facts": [{"entity": "master, neko или relationship", "content": "одно законченное, самодостаточное предложение-факт", "importance": целое число 1-10, "confidence": десятичное число 0.0-1.0}]}
+
+Требования:
+1. Извлекайте только факты, **явно указанные** в корпусе; никаких домыслов, выводов или описаний атмосферы.
+2. Значение entity: master = факт о пользователе, neko = факт о самом персонаже-компаньоне, relationship = факт об их отношениях.
+3. confidence — ваша уверенность в истинности факта; давайте 0.8+ только фактам, прямо подтверждённым текстом корпуса.
+4. Не более 10 фактов; верните {"facts": []}, если в корпусе нет надёжных фактов.""",
+}
+
+
+# ---------- persona refine (Phase 5 M4, correction tier) ----------
+# %s placeholders: (companion_name, current_system_prompt, user_feedback)
+
+COMPANION_PERSONA_REFINE_PROMPT = {
+    'zh': """你是一个虚拟伴侣人设修订专家。名为「%s」的虚拟伴侣已有如下 system prompt：
+
+======当前 system prompt======
+%s
+======当前 system prompt 结束======
+
+用户对该人设提出了如下反馈：
+%s
+
+请基于反馈对 system prompt 做**最小必要修订**，只返回如下 JSON（不要附加任何解释文本）：
+{"system_prompt": "修订后的完整 system prompt", "change_summary": "一两句话说明改了什么"}
+
+要求：
+1. 只修改与反馈直接相关的部分，未被反馈涉及的设定原样保留。
+2. 保持原有的人称、篇幅量级和写作风格。
+3. 反馈与既有设定冲突时以反馈为准。""",
+
+    'en': """You are a virtual-companion persona editor. The companion named "%s" currently has this system prompt:
+
+======current system prompt======
+%s
+======current system prompt ends======
+
+The user gave the following feedback about the persona:
+%s
+
+Apply the **minimal necessary revision** to the system prompt based on the feedback, and return ONLY the following JSON (no extra prose):
+{"system_prompt": "the complete revised system prompt", "change_summary": "one or two sentences describing what changed"}
+
+Requirements:
+1. Only change the parts directly addressed by the feedback; keep everything else verbatim.
+2. Preserve the original person, length scale and writing style.
+3. When the feedback conflicts with the existing settings, the feedback wins.""",
+
+    'ja': """あなたはバーチャルコンパニオンのキャラ設定修訂の専門家です。「%s」という名前のコンパニオンには現在、次の system prompt があります：
+
+======現在の system prompt======
+%s
+======現在の system prompt 終わり======
+
+ユーザーはこのキャラ設定について次のフィードバックを出しました：
+%s
+
+フィードバックに基づき system prompt に**必要最小限の修訂**を行い、次の JSON のみを返してください（説明文は一切不要）：
+{"system_prompt": "修訂後の完全な system prompt", "change_summary": "何を変えたかの一〜二文の説明"}
+
+要件：
+1. フィードバックに直接関わる部分のみを変更し、それ以外の設定はそのまま保持すること。
+2. 元の人称・分量・文体を維持すること。
+3. フィードバックが既存設定と矛盾する場合はフィードバックを優先すること。""",
+
+    'ko': """당신은 가상 컴패니언 페르소나 수정 전문가입니다. 「%s」라는 이름의 컴패니언에는 현재 다음 system prompt가 있습니다:
+
+======현재 system prompt======
+%s
+======현재 system prompt 끝======
+
+사용자가 이 페르소나에 대해 다음 피드백을 제시했습니다:
+%s
+
+피드백에 근거해 system prompt에 **최소한의 필요한 수정**만 가하고 다음 JSON만 반환하세요(설명 텍스트 금지):
+{"system_prompt": "수정된 완전한 system prompt", "change_summary": "무엇을 바꿨는지 한두 문장의 설명"}
+
+요구 사항:
+1. 피드백과 직접 관련된 부분만 수정하고 나머지 설정은 그대로 유지할 것.
+2. 원래의 인칭, 분량, 문체를 유지할 것.
+3. 피드백이 기존 설정과 충돌하면 피드백을 우선할 것.""",
+
+    'ru': """Вы — редактор персон виртуальных компаньонов. У компаньона по имени «%s» сейчас такой system prompt:
+
+======текущий system prompt======
+%s
+======конец текущего system prompt======
+
+Пользователь дал следующий отзыв о персоне:
+%s
+
+Внесите в system prompt **минимально необходимые правки** на основе отзыва и верните ТОЛЬКО следующий JSON (без пояснений):
+{"system_prompt": "полный исправленный system prompt", "change_summary": "одно-два предложения о том, что изменилось"}
+
+Требования:
+1. Меняйте только то, что прямо затронуто отзывом; всё остальное сохраните дословно.
+2. Сохраните исходное лицо повествования, объём и стиль.
+3. При конфликте отзыва с существующими настройками приоритет у отзыва.""",
+}

@@ -29,6 +29,7 @@ class GenerationStage(str, Enum):
   INGEST = "ingest"
   ANALYZE_CORPUS = "analyze_corpus"
   EXTRACT_PERSONA = "extract_persona"
+  EXTRACT_FACT_SEEDS = "extract_fact_seeds"
   CONFIGURE_AVATAR = "configure_avatar"
   CONFIGURE_VOICE = "configure_voice"
   INIT_MEMORY = "init_memory"
@@ -41,6 +42,9 @@ class GenerationInput(BaseModel):
   corpus_text: str | None = None
   corpus_files: list[str] = Field(default_factory=list)
   system_prompt: str | None = None
+  # Phase 5 M4: opt-in corpus → fact-layer seed extraction. Default OFF —
+  # the stage is a no-op unless the wizard explicitly enables it.
+  extract_fact_seeds: bool = False
   live2d_model_id: str | None = None
   live2d_package_path: str | None = None
   reference_images: list[str] = Field(default_factory=list)

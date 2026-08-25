@@ -56,6 +56,30 @@ COMPANION_UPLOAD_MAX_FILES_PER_FIELD = 20
 - 防御性上限：向导 UI 正常一次选几个文件，20 足够；超限以 413 拒绝，
   防止一次 multipart 请求塞入海量小文件。"""
 
+COMPANION_FACT_SEED_MAX_SEEDS = 10
+"""语料 → fact 种子阶段（Phase 5 M4，默认关）单次生成落入 manifest 的
+fact 种子条数上限。
+- 用途：`companion/generator/pipeline.py` 的 extract_fact_seeds 阶段。LLM
+  输出的高置信事实按 confidence 过滤后再截到该上限，防止超长语料一次
+  塞爆导入端的 fact 层。"""
+
+COMPANION_FACT_SEED_MIN_CONFIDENCE = 0.8
+"""fact 种子的最低置信度门槛（LLM 自报 0.0-1.0）。
+- 低于该值的候选事实直接丢弃：fact 层是长期记忆的 ground truth，宁缺
+  毋滥；语料里的推测/演绎内容应留在 persona 层由对话逐步验证。"""
+
+COMPANION_REFINE_FEEDBACK_MAX_TOKENS = 800
+"""人设迭代（POST /persona/{name}/refine）用户反馈的输入 token 上限。
+- 用途：`companion/ai/refine.py` 拼 correction tier prompt 前截断用户
+  自由输入的反馈文本，防止超长粘贴撑爆输入（与
+  COMPANION_PROMPT_SEED_MAX_TOKENS 同理由、同量级）。"""
+
+COMPANION_PERSONA_VERSION_MAX_SNAPSHOTS = 20
+"""characters.json 卡片版本链（Phase 5 M4）单角色保留的快照数上限。
+- 用途：`companion/ai/persona_versions.py`。每次 refine 写回 / 回滚前都
+  快照上一版本，链长超限时丢最老的——20 个版本足够覆盖一轮完整的人设
+  打磨，同时防止版本文件无限膨胀。"""
+
 COMPANION_CORPUS_FILE_MERGE_MAX_CHARS = 200_000
 """上传语料文本文件合并进 `corpus_text` 的总字符上限。
 - 用途：upload 端点把可解码的文本语料（.txt/.md/.json 等）拼接进
